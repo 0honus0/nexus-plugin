@@ -96,6 +96,23 @@ test(
 		const app = page.getByRole('region', { name: 'Credentials', exact: true });
 		await expect(app.getByText('Renamed fixture')).toBeVisible();
 		await expect(app.getByText('SSH key fixture')).toBeVisible();
+		for (const [name, type] of [
+			['Renamed fixture', 'Password'],
+			['SSH key fixture', 'Private key'],
+		]) {
+			const card = app.locator('.credentials-card').filter({ hasText: name });
+			const badge = card.locator('.ui-card__badge');
+			const remove = card.getByRole('button', { name: 'Delete · ' + name });
+			await expect(badge).toHaveText(type);
+			await expect(card.locator('.ui-card__tags')).toHaveCount(0);
+			const bounds = (await card.boundingBox())!;
+			expect(bounds.height).toBeLessThanOrEqual(60);
+			const label = (await badge.boundingBox())!;
+			const action = (await remove.boundingBox())!;
+			expect(label.x + label.width).toBeLessThan(action.x);
+			expect(label.y + label.height / 2).toBeCloseTo(action.y + action.height / 2, 0);
+			expect(action.y + action.height / 2).toBeCloseTo(bounds.y + bounds.height / 2, 0);
+		}
 
 		await app.getByRole('button', { name: 'Add credential', exact: true }).click();
 		const dialog = page.getByRole('dialog', { name: 'Add credential' });

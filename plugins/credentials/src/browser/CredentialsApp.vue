@@ -87,9 +87,6 @@
 				<template #badge>
 					<UiBadge tone="neutral">{{ t(item.type + 'Type') }}</UiBadge>
 				</template>
-				<template v-if="item.hasPassphrase" #tags>
-					<span class="credentials-security">{{ t('protectedKey') }}</span>
-				</template>
 				<template #actions
 					><UiButton
 						appearance="ghost"

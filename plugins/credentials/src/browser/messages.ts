@@ -27,7 +27,6 @@ export const messages = {
 		emptyHint: '保存一套认证，让不同连接复用。',
 		noResults: '没有匹配的认证',
 		actions: '管理认证',
-		protectedKey: '带口令',
 		key: '私钥',
 		all: '全部',
 		notices: {
@@ -71,7 +70,6 @@ export const messages = {
 		emptyHint: 'Save a credential to reuse across connections.',
 		noResults: 'No matching credentials',
 		actions: 'Manage credential',
-		protectedKey: 'Passphrase',
 		key: 'Private key',
 		all: 'All',
 		notices: {

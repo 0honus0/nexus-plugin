@@ -1,3 +1,4 @@
+import { Server } from '@lucide/vue';
 import { defineAsyncComponent, defineComponent, h, provide, ref } from 'vue';
 import type { PluginApplicationTileProps, PluginModuleApi, PluginWindowProps } from 'nexus-terminal/browser';
 import { ConnectionsClient } from './connections-client-api.js';
@@ -54,6 +55,7 @@ export const activate: PluginModuleApi['activate'] = async (context) => {
 	const application = {
 		id: 'main',
 		label,
+		icon: Server,
 		component,
 		tile: { component: tile, showAtIconSize: true },
 		scrollbarGutter: 'stable',

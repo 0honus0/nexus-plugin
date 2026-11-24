@@ -1,3 +1,4 @@
+import { KeyRound } from '@lucide/vue';
 import { defineAsyncComponent, defineComponent, h } from 'vue';
 import type { PluginModuleApi, PluginWindowProps } from 'nexus-terminal/browser';
 import { CredentialsClient } from './credentials-client-api.js';
@@ -31,6 +32,7 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 		applications: [
 			{
 				id: 'main',
+				icon: KeyRound,
 
 				label: (locale?: string) =>
 					(locale === undefined ? undefined : titles.get(locale)) ?? messages.en.title,

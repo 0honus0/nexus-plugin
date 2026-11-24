@@ -14,6 +14,7 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 		applications: [
 			{
 				id: 'main',
+				icon: Fingerprint,
 
 				label: (locale) => (locale?.startsWith('zh') ? messages.zh.title : messages.en.title),
 

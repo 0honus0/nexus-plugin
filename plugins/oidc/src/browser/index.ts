@@ -15,6 +15,7 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 		applications: [
 			{
 				id: 'main',
+				icon: ShieldCheck,
 				label: messages.en.title,
 				component: defineAsyncComponent(() => import('./OidcApp.vue')),
 				defaultWindowSize: { width: 840, height: 700 },

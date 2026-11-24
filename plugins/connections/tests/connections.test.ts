@@ -124,6 +124,20 @@ test(
 		await expect(app.getByText('SSH fixture')).toBeVisible();
 		await expect(app.getByText('RDP fixture')).toBeVisible();
 		await expect(app.getByText('VNC fixture')).toBeVisible();
+		for (const type of ['SSH', 'RDP', 'VNC']) {
+			const card = app.locator('.connections-card').filter({ hasText: type + ' fixture' });
+			await expect(card.locator('.ui-card__title-line .connections-type')).toHaveText(type);
+			await expect(card.locator('.ui-card__side .ui-card__badge')).toHaveCount(0);
+			const menu = card.getByRole('button', { name: 'More actions · ' + type + ' fixture' });
+			await expect(menu).toBeVisible();
+			const bounds = (await card.boundingBox())!;
+			const action = (await menu.boundingBox())!;
+			expect(action.y + action.height / 2).toBeCloseTo(bounds.y + bounds.height / 2, 0);
+		}
+		await expect(
+			app.locator('.connections-card').filter({ hasText: 'SSH fixture' }).locator('.connections-tag'),
+		).toHaveText(catalog.tags[0].name);
+
 		expect(catalogRequests).toBe(1);
 
 		await app.getByRole('button', { name: 'Add connection', exact: true }).click();

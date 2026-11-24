@@ -174,14 +174,16 @@
 				:tone="item.type === 'ssh' ? 'primary' : item.type === 'rdp' ? 'success' : 'neutral'"
 				@select="editor = { connection: item }"
 			>
-				<template v-if="item.tags.length" #tags
-					><span v-for="name in item.tags" :key="name" class="connections-tag">{{ name }}</span></template
-				>
-				<template #badge
-					><UiBadge :tone="item.type === 'ssh' ? 'primary' : item.type === 'rdp' ? 'success' : 'neutral'">{{
-						t('types.' + item.type)
-					}}</UiBadge></template
-				>
+				<template #title-end>
+					<UiBadge
+						class="connections-type"
+						:tone="item.type === 'ssh' ? 'primary' : item.type === 'rdp' ? 'success' : 'neutral'"
+						>{{ t('types.' + item.type) }}</UiBadge
+					>
+				</template>
+				<template v-if="item.tags.length" #tags>
+					<span v-for="name in item.tags" :key="name" :title="name" class="connections-tag">{{ name }}</span>
+				</template>
 				<template #actions>
 					<UiDropdownMenu :items="actions" @select="selectAction($event, item)">
 						<UiButton appearance="ghost" icon-only :aria-label="t('actions') + ' · ' + item.name"

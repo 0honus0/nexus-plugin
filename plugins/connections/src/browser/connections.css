@@ -44,15 +44,47 @@
 	flex-wrap: wrap;
 }
 .connections-card.ui-card {
-	--ui-card-padding: 10px 14px;
+	--ui-card-padding: 12px 0 12px 14px;
 	flex: none;
+	gap: 4px;
 }
 .connections-card.ui-card .ui-card__body {
-	gap: 8px;
+	flex: 1;
+	gap: 4px;
+}
+.connections-card.ui-card .ui-card__tags {
+	align-items: center;
+	gap: 5px;
+	margin-top: 3px;
+}
+.connections-card.ui-card .ui-card__tags > .connections-tag {
+	box-sizing: border-box;
+	min-height: 22px;
+	padding: 3px 7px;
+	border-radius: 6px;
+	line-height: 16px;
+}
+.connections-card.ui-card .connections-type {
+	flex: none;
+	padding: 1px 6px;
+	font-size: 10px;
+	line-height: 16px;
+	border-radius: 5px;
+}
+.connections-card.ui-card .connections-tag {
+	min-width: 0;
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .connections-card.ui-card .ui-card__side {
-	padding-block: 8px;
-	gap: 2px;
+	align-self: center;
+	justify-content: center;
+	padding: 0 10px 0 0;
+}
+.connections-card.ui-card .ui-card__actions {
+	margin-top: 0;
 }
 .connections-tag {
 	display: inline-flex;
@@ -215,6 +247,13 @@
 	}
 }
 @container (max-width:400px) {
+	.connections-card.ui-card {
+		--ui-card-padding: 10px 0 10px 10px;
+		--ui-card-radius: 14px;
+	}
+	.connections-card.ui-card .ui-card__side {
+		padding-right: 6px;
+	}
 	.connections-toolbar {
 		gap: 8px;
 	}

@@ -84,7 +84,6 @@ export function usePresentation(context: () => PresentationContext) {
 				id: 'layout',
 				label: t('layout'),
 				icon: PanelsTopLeft,
-				menuTransition: 'drop',
 				active: !locked.value,
 				disabled: !loaded.value,
 				items: [

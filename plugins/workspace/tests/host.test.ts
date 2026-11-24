@@ -296,7 +296,7 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 	channels[0].write('audit selectable');
 	await verifyTerminalSelection(workspace);
 	await verifyWorkspacePanels(page, workspace, host);
-	await verifyWorkspaceSessionPresentation(page, workspace, host, () => {
+	const sourceId = await verifyWorkspaceSessionPresentation(page, workspace, host, () => {
 		statusSample = Promise.withResolvers<void>();
 		return statusSample.resolve;
 	});
@@ -327,10 +327,11 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 	);
 	if (destinationSession.result.state !== 'created') throw new Error('WORKSPACE_TEST_DESTINATION_NOT_CREATED');
 	const source = SessionListResponseSchema.parse(await host.json(base + '/sessions')).items.find(
-		(item) => item.state === 'attached' && item.presentation,
-	)!;
+		(item) => item.id === sourceId,
+	);
+	expect(source).toMatchObject({ connectionId: connection.id, state: 'attached', terminal: 'running' });
 	await verifyWorkspaceTransfers(page, workspace, {
-		sourceId: source.id,
+		sourceId,
 		destinationId: destinationSession.result.session.id,
 		directory: destination,
 		readStarted: readStarted.promise,

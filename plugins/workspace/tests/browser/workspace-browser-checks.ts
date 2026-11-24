@@ -332,7 +332,7 @@ export async function verifyWorkspaceSessionPresentation(
 	workspace: Locator,
 	host: Host,
 	pauseStatus: () => () => void,
-): Promise<void> {
+): Promise<string> {
 	const active = workspace.locator('.workspace-tab-panel[data-state="active"]');
 	const files = active.locator('.workspace-file-list');
 	const terminal = active.locator('.workspace-terminal-slot');
@@ -451,7 +451,25 @@ export async function verifyWorkspaceSessionPresentation(
 	await expect(resumedTab).toHaveAttribute('aria-description', 'Marked for suspend');
 	await setMark(false, resumedTab);
 	const resumedLabel = await resumedTab.innerText();
+	const closed = page.waitForResponse(
+		(value) =>
+			new URL(value.url()).pathname === base + '/sessions/' + session.id + '/release' &&
+			value.request().method() === 'POST',
+	);
 	await workspace.getByRole('button', { name: 'Close tab ' + resumedLabel.trim(), exact: true }).click();
+	const closeResponse = await closed;
+	expect(closeResponse.status(), await closeResponse.text()).toBe(204);
+	await expect(workspace.getByRole('tab', { name: 'Workspace test SSH', exact: true })).toHaveAttribute(
+		'aria-selected',
+		'true',
+	);
+	await expect(workspace.getByRole('button', { name: 'Close tab Workspace test SSH', exact: true })).toBeVisible();
+	const remaining = SessionListResponseSchema.parse(await host.json(base + '/sessions')).items;
+	expect(remaining.some((item) => item.id === session.id)).toBe(false);
+	expect(remaining).toEqual([
+		expect.objectContaining({ connectionId: session.connectionId, state: 'attached', terminal: 'running' }),
+	]);
+	return remaining[0].id;
 }
 
 export async function verifyTerminalSelection(workspace: Locator): Promise<void> {

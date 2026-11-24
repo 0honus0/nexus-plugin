@@ -28,6 +28,7 @@ export function createWorkspaceI18n(locale: Readonly<Ref<string>>) {
 
 	return {
 		t,
+		language,
 
 		n: (value: number) => i18n.global.n(value, { locale: language.value }),
 

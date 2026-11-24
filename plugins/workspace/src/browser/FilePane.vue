@@ -118,7 +118,14 @@
 			),
 	);
 	const visibleRows = computed(() => (parent.value ? [parent.value, ...rows.value] : rows.value));
-	const selectedEntries = computed(() => rows.value.filter((entry) => selected.value.includes(entry.path)));
+	const selectedPaths = computed(() => new Set(selected.value));
+	const cutPaths = computed(() => {
+		const clipboard = shared.clipboard.value;
+		return new Set(
+			clipboard?.operation === 'cut' && clipboard.sourceSessionId === props.sessionId ? clipboard.paths : [],
+		);
+	});
+	const selectedEntries = computed(() => rows.value.filter((entry) => selectedPaths.value.has(entry.path)));
 
 	const isParent = (entry?: FileEntry) => entry?.name === '..';
 
@@ -139,7 +146,8 @@
 		{ immediate: true },
 	);
 	watch(visibleRows, (value) => {
-		selected.value = selected.value.filter((p) => value.some((e) => e.path === p));
+		const available = new Set(value.map((entry) => entry.path));
+		selected.value = selected.value.filter((p) => available.has(p));
 	});
 
 	function up() {
@@ -153,7 +161,7 @@
 				b = keys.indexOf(entry.path);
 			selected.value = keys.slice(Math.min(Math.max(a, 0), b), Math.max(a, b) + 1);
 		} else if (event?.ctrlKey || event?.metaKey) {
-			selected.value = selected.value.includes(entry.path)
+			selected.value = selectedPaths.value.has(entry.path)
 				? selected.value.filter((p) => p !== entry.path)
 				: [...selected.value, entry.path];
 			anchor.value = entry.path;
@@ -166,12 +174,12 @@
 
 	function targets(entry?: FileEntry) {
 		if (!entry || isParent(entry)) return [];
-		return selected.value.includes(entry.path) ? selectedEntries.value : [entry];
+		return selectedPaths.value.has(entry.path) ? selectedEntries.value : [entry];
 	}
 
 	function prepareContext(entry?: FileEntry) {
 		context.value = entry;
-		if (entry && !selected.value.includes(entry.path)) {
+		if (entry && !selectedPaths.value.has(entry.path)) {
 			selected.value = [entry.path];
 			anchor.value = entry.path;
 		}
@@ -516,16 +524,20 @@
 					<button
 						v-for="entry in visibleRows"
 						:key="entry.path"
+						v-memo="[
+							entry,
+							selectedPaths.has(entry.path),
+							cutPaths.has(entry.path),
+							enabled,
+							i18n.language.value,
+						]"
 						class="workspace-file-row"
 						:class="{
-							'is-selected': selected.includes(entry.path),
-							'is-cut':
-								shared.clipboard.value?.operation === 'cut' &&
-								shared.clipboard.value.sourceSessionId === sessionId &&
-								shared.clipboard.value.paths.includes(entry.path),
+							'is-selected': selectedPaths.has(entry.path),
+							'is-cut': cutPaths.has(entry.path),
 						}"
 						:aria-label="isParent(entry) ? t('parentDirectory') : displayName(entry)"
-						:aria-pressed="selected.includes(entry.path)"
+						:aria-pressed="selectedPaths.has(entry.path)"
 						:disabled="!enabled"
 						@click="select(entry, $event)"
 						@contextmenu="prepareContext(entry)"

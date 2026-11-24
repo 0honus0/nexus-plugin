@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { Fingerprint, Plus, Trash2 } from '@lucide/vue';
+	import { Fingerprint, Plus, RefreshCw, Trash2 } from '@lucide/vue';
 	import type { PluginWindowProps } from 'nexus-terminal/browser';
 	import { UiButton, UiDialog, UiEmptyState, UiList, UiListItem } from 'nexus-terminal/browser/ui';
 	import { onMounted, ref } from 'vue';
@@ -12,19 +12,28 @@
 	const { context, view } = defineProps<PluginWindowProps>();
 	const { t } = useI18n({ useScope: 'local', messages });
 	const items = ref<Passkey[]>();
+	const reading = ref(false);
 	const adding = ref(false);
 	const removing = ref(false);
 	const selected = ref<Passkey>();
 	const supported = passkeysSupported();
 
-	onMounted(async () => {
+	async function load() {
+		if (reading.value || view.signal.aborted) return;
+		reading.value = true;
+		const signal = AbortSignal.any([view.signal, AbortSignal.timeout(15_000)]);
 		try {
-			const result = await context.app.http.json('/passkeys', PasskeyListSchema, { signal: view.signal });
+			const result = await context.app.http.json('/passkeys', PasskeyListSchema, { signal });
+			signal.throwIfAborted();
 			items.value = result.items;
 		} catch (cause) {
 			reportPasskeyFailure(context, cause, view.signal);
+		} finally {
+			reading.value = false;
 		}
-	});
+	}
+
+	onMounted(load);
 
 	async function add() {
 		if (!items.value || adding.value || removing.value) return;
@@ -69,9 +78,13 @@
 </script>
 
 <template>
-	<section class="passkey-app" :class="{ 'passkey-app--empty': items?.length === 0 }">
+	<section class="passkey-app" :class="{ 'passkey-app--empty': !items?.length }" :aria-busy="reading">
+		<UiEmptyState v-if="reading" :icon="Fingerprint" :title="t('loading')" role="status" />
+		<UiEmptyState v-else-if="!items" :icon="Fingerprint" :title="t('loadFailed')">
+			<UiButton @click="load"><RefreshCw :size="16" />{{ t('retry') }}</UiButton>
+		</UiEmptyState>
 		<UiEmptyState
-			v-if="items?.length === 0"
+			v-else-if="items.length === 0"
 			:icon="Fingerprint"
 			:title="t('empty')"
 			:description="supported ? undefined : t('secureOrigin')"
@@ -89,7 +102,7 @@
 				</UiButton>
 			</template>
 		</UiEmptyState>
-		<p v-if="!supported && items?.length !== 0" class="passkey-hint">{{ t('secureOrigin') }}</p>
+		<p v-if="!supported && !!items?.length" class="passkey-hint">{{ t('secureOrigin') }}</p>
 		<UiList v-if="items?.length">
 			<UiListItem
 				v-for="item in items"

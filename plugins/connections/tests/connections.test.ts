@@ -138,6 +138,14 @@ test(
 			app.locator('.connections-card').filter({ hasText: 'SSH fixture' }).locator('.connections-tag'),
 		).toHaveText(catalog.tags[0].name);
 
+		const search = app.getByRole('textbox', { name: 'Search name, address or username', exact: true });
+		await search.fill('user');
+		await expect(app.getByText('SSH fixture', { exact: true })).toBeVisible();
+		await expect(app.getByText('user@example.test:22', { exact: true })).toBeVisible();
+		await expect(app.getByText('RDP fixture', { exact: true })).toHaveCount(0);
+		await expect(app.getByText('VNC fixture', { exact: true })).toHaveCount(0);
+		await search.clear();
+		await expect(app.getByText('RDP fixture', { exact: true })).toBeVisible();
 		expect(catalogRequests).toBe(1);
 
 		await app.getByRole('button', { name: 'Add connection', exact: true }).click();

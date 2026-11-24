@@ -33,7 +33,7 @@
 	const { t } = useI18n({ useScope: 'local', messages });
 	watchEffect(() => (props.label.value = t('title')));
 	const client = useConnections();
-	const { catalog, loaded, requests } = client;
+	const { catalog, loaded, requests, credentials } = client;
 	const loading = computed(() => requests.value > 0);
 	const { signal } = props.view;
 
@@ -43,6 +43,13 @@
 		} catch (cause) {
 			client.report(cause, signal);
 		}
+	}
+
+	async function refreshAll() {
+		await Promise.all([
+			refresh(),
+			credentials.value?.refresh(signal).catch((cause) => client.report(cause, signal)),
+		]);
 	}
 
 	const search = ref(''),
@@ -88,6 +95,24 @@
 		{ value: 'all', label: t('allTags') },
 		...catalog.value.tags.map((tag) => ({ value: tag.id, label: tag.name })),
 	]);
+	const usernames = computed(() => new Map(credentials.value?.items.value.map(({ id, username }) => [id, username])));
+
+	function username(item: Connection): string {
+		return item.type === 'vnc'
+			? ''
+			: item.credentialId
+				? (usernames.value.get(item.credentialId) ?? '')
+				: item.username;
+	}
+
+	watch(
+		credentials,
+		(api) => {
+			if (api && !api.loaded.value) void api.refresh(signal).catch((cause) => client.report(cause, signal));
+		},
+		{ immediate: true },
+	);
+
 	const entries = computed(() => {
 		const query = search.value.trim().toLowerCase();
 		const name = catalog.value.tags.find((item) => item.id === tag.value)?.name;
@@ -95,7 +120,7 @@
 			(item) =>
 				(type.value === 'all' || item.type === type.value) &&
 				(!name || item.tags.includes(name)) &&
-				(!query || [item.name, item.host, item.username].some((value) => value.toLowerCase().includes(query))),
+				(!query || [item.name, item.host, username(item)].some((value) => value.toLowerCase().includes(query))),
 		);
 	});
 	const actions = computed(() => [
@@ -157,7 +182,7 @@
 					:loading="loading"
 					loading-animation="icon"
 					:aria-label="t('refresh')"
-					@click="refresh"
+					@click="refreshAll"
 					><RefreshCw :size="17"
 				/></UiButton>
 			</div>
@@ -169,7 +194,7 @@
 				class="connections-card"
 				:data-type="item.type"
 				:title="item.name"
-				:description="address(item)"
+				:description="address({ ...item, username: username(item) })"
 				:icon="icons[item.type]"
 				:tone="item.type === 'ssh' ? 'primary' : item.type === 'rdp' ? 'success' : 'neutral'"
 				@select="editor = { connection: item }"

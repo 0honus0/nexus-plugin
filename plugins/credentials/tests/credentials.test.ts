@@ -11,7 +11,7 @@ const path = '/api/plugins/' + encodeURIComponent(pluginId) + '/credentials';
 
 test(
 	'packaged Credentials validates keys, preserves secrets on edits, and exposes summaries only',
-	{ timeout: 45000 },
+	{ timeout: 60000 },
 	async () => {
 		await using resources = new AsyncDisposableStack();
 		const host = await startHost(resources, pluginId, [
@@ -130,6 +130,22 @@ test(
 		await dialog.getByRole('button', { name: 'Save', exact: true }).click();
 		await expect(app.getByText('Browser credential')).toBeVisible();
 		await expect(page.locator('[data-ui="toast"]').getByText('Credential saved.')).toBeVisible();
+		await app.getByText('Browser credential', { exact: true }).click();
+		const edit = page.getByRole('dialog', { name: 'Edit credential', exact: true });
+		await expect(edit.locator('input[type=password]')).toHaveValue('');
+		await edit.getByRole('textbox', { name: 'Name', exact: true }).fill('Edited browser credential');
+		await edit.getByRole('button', { name: 'Save', exact: true }).click();
+		await expect(app.getByText('Edited browser credential', { exact: true })).toBeVisible();
+		const search = app.getByRole('textbox', { name: 'Search name or username', exact: true });
+		await search.fill('browser-user');
+		await expect(app.locator('.credentials-card')).toHaveCount(1);
+		await app.getByRole('combobox', { name: 'Authentication', exact: true }).click();
+		await page.getByRole('option', { name: 'Private key', exact: true }).click();
+		await expect(app.getByText('No matching credentials', { exact: true })).toBeVisible();
+		await app.getByRole('combobox', { name: 'Authentication', exact: true }).click();
+		await page.getByRole('option', { name: 'All', exact: true }).click();
+		await search.clear();
+		await expect(app.getByText('Edited browser credential', { exact: true })).toBeVisible();
 
 		await app.getByRole('button', { name: 'Add credential', exact: true }).click();
 		await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Invalid browser key');
@@ -144,6 +160,29 @@ test(
 		await dialog.getByRole('button', { name: 'Save', exact: true }).click();
 		await expect(page.locator('[data-ui="toast"]').getByText('Invalid private key or passphrase.')).toBeVisible();
 		await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+		await app.getByRole('button', { name: 'Add credential', exact: true }).click();
+		await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Imported key fixture');
+		await dialog.getByRole('textbox', { name: 'Username', exact: true }).fill('browser-user');
+		await dialog.getByRole('combobox', { name: 'Authentication' }).click();
+		await page.getByRole('option', { name: 'Private key', exact: true }).click();
+		await dialog.locator('input[type=file]').setInputFiles({
+			name: 'fixture.pem',
+			mimeType: 'application/x-pem-file',
+			buffer: Buffer.from(privateKey),
+		});
+		await expect(keyInput).toHaveValue(privateKey);
+		await dialog.getByLabel('Key passphrase', { exact: true }).fill('fixture');
+		await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+		await expect(app.getByText('Imported key fixture', { exact: true })).toBeVisible();
+		const remove = app.getByRole('button', { name: 'Delete · Imported key fixture', exact: true });
+		await remove.click();
+		const confirmation = page.getByRole('dialog', { name: 'Delete credential', exact: true });
+		await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect(app.getByText('Imported key fixture', { exact: true })).toBeVisible();
+		await remove.click();
+		await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
+		await expect(app.getByText('Imported key fixture', { exact: true })).toHaveCount(0);
 
 		const response = await host.request(path + '/' + key.id, { method: 'DELETE' });
 		assert.equal(response.status, 204);

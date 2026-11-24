@@ -44,8 +44,28 @@ it.each([
 		await page.getByLabel('Username', { exact: true }).fill('owner');
 		await page.getByLabel('Password', { exact: true }).fill('sdk-fixture-password');
 		await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-		await page.getByRole('button', { name: 'Passkeys', exact: true }).click();
+		const response = Promise.withResolvers<void>();
+		await page.route(
+			'**/passkeys',
+			async (route) => {
+				await response.promise;
+				await route.fulfill({
+					status: 503,
+					json: { type: 'about:blank', status: 503, code: 'PASSKEY_OPERATION_FAILED' },
+				});
+			},
+			{ times: 1 },
+		);
 		const manager = page.getByRole('region', { name: 'Passkeys', exact: true });
+		try {
+			await page.getByRole('button', { name: 'Passkeys', exact: true }).click();
+			await expect(manager.getByRole('status')).toContainText('Loading passkeys');
+			await expect(manager.getByRole('button', { name: 'Add passkey', exact: true })).toHaveCount(0);
+		} finally {
+			response.resolve();
+		}
+		await expect(manager.getByText('Could not load passkeys', { exact: true })).toBeVisible();
+		await manager.getByRole('button', { name: 'Retry', exact: true }).click();
 		const emptyState = manager.locator('[data-ui="empty-state"]');
 		const list = manager.getByRole('list');
 		const addButton = { name: 'Add passkey', exact: true };

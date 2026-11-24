@@ -7,6 +7,9 @@ export const messages = {
 		cancel: 'Cancel',
 		removeTitle: 'Remove passkey?',
 		empty: 'No passkeys registered',
+		loading: 'Loading passkeys…',
+		loadFailed: 'Could not load passkeys',
+		retry: 'Retry',
 		secureOrigin: 'Open Nexus over HTTPS or localhost to use passkeys.',
 	},
 	zh: {
@@ -17,6 +20,9 @@ export const messages = {
 		cancel: '取消',
 		removeTitle: '移除通行密钥？',
 		empty: '还没有登记通行密钥',
+		loading: '正在读取通行密钥…',
+		loadFailed: '无法读取通行密钥',
+		retry: '重试',
 		secureOrigin: '请通过 HTTPS 或 localhost 打开 Nexus 以使用通行密钥。',
 	},
 };

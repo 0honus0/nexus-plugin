@@ -151,3 +151,75 @@ it('does not delete a suspended session until confirmation and releases marked t
 		scope.stop();
 	}
 });
+
+it('applies the confirmed suspend mark without waiting for a state frame, preserving newer session metadata', async () => {
+	const scope = effectScope();
+	const session: SessionInfo = {
+		id: randomUUID(),
+		connectionId: randomUUID(),
+		name: 'Attached',
+		state: 'attached',
+		markedForSuspend: false,
+		terminal: 'running',
+		transfers: 0,
+		createdAt: 1,
+	};
+	let update!: (value: { items: SessionInfo[] }) => void;
+	const report = vi.fn();
+	const json = vi.fn();
+	const model = scope.run(() =>
+		useWorkspaceSessions({
+			ctx: {
+				signal: new AbortController().signal,
+				app: {
+					state: {
+						subscribe: (_topic: string, _schema: unknown, observer: { updated: typeof update }) => {
+							update = observer.updated;
+							return () => {};
+						},
+					},
+					http: { json },
+					log: { report },
+				},
+
+				use: () => () => {},
+			} as unknown as PluginContextApi,
+			view: {
+				signal: new AbortController().signal,
+
+				onBeforeClose: () => () => {},
+			} as unknown as PluginWindowApi,
+		}),
+	)!;
+	try {
+		update({ items: [session] });
+		model.add(session);
+		const marked = Promise.withResolvers<SessionInfo>();
+		json.mockReturnValueOnce(marked.promise);
+		const marking = model.toggleSuspend(session.id);
+		expect(model.marking.value).toBe(session.id);
+		expect(model.tabs.value[0]?.markedForSuspend).toBe(false);
+		update({ items: [{ ...session, transfers: 2 }] });
+		marked.resolve({ ...session, markedForSuspend: true });
+		await marking;
+		expect(model.tabs.value[0]).toMatchObject({ markedForSuspend: true, transfers: 2 });
+		expect(model.marking.value).toBeUndefined();
+		json.mockRejectedValueOnce(new Error('fixture request failure'));
+		await model.toggleSuspend(session.id);
+		expect(model.tabs.value[0]?.markedForSuspend).toBe(true);
+		expect(report).toHaveBeenCalledOnce();
+		json.mockResolvedValueOnce({ ...session, markedForSuspend: false });
+		await model.toggleSuspend(session.id);
+		expect(model.tabs.value[0]).toMatchObject({ markedForSuspend: false, transfers: 2 });
+		expect(JSON.parse(json.mock.calls[2]![2].body)).toEqual({ marked: false });
+		const retired = Promise.withResolvers<SessionInfo>();
+		json.mockReturnValueOnce(retired.promise);
+		const pending = model.toggleSuspend(session.id);
+		update({ items: [] });
+		retired.resolve({ ...session, markedForSuspend: true });
+		await pending;
+		expect(model.tabs.value).toEqual([]);
+	} finally {
+		scope.stop();
+	}
+});

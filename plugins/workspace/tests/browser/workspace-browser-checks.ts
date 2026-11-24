@@ -395,9 +395,26 @@ export async function verifyWorkspaceSessionPresentation(
 	const fontSize = await terminalRows.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
 	await active.locator('.workspace-terminal').dispatchEvent('wheel', { ctrlKey: true, deltaY: -90 });
 	await expect(terminalRows).toHaveCSS('font-size', `${fontSize + 1}px`);
-	await first.click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Mark for suspend', exact: true }).click();
-	await expect(first).toHaveAttribute('aria-description', 'Marked for suspend');
+	const markPath = base + '/sessions/' + session.id + '/mark';
+
+	async function setMark(marked: boolean, tab: Locator) {
+		await tab.click({ button: 'right' });
+		const response = page.waitForResponse(
+			(value) => new URL(value.url()).pathname === markPath && value.request().method() === 'PATCH',
+		);
+		await page.getByRole('menuitem', { name: marked ? 'Mark for suspend' : 'Unmark suspend', exact: true }).click();
+		const result = await response;
+		expect(result.status(), await result.text()).toBe(200);
+		expect(await result.json()).toMatchObject({ id: session.id, state: 'attached', markedForSuspend: marked });
+		expect(
+			SessionListResponseSchema.parse(await host.json(base + '/sessions')).items.find(
+				(item) => item.id === session.id,
+			),
+		).toMatchObject({ state: 'attached', markedForSuspend: marked });
+		await expect(tab).toHaveAttribute('aria-description', marked ? 'Marked for suspend' : 'Connected');
+	}
+
+	await setMark(true, first);
 	await expect(active.locator('.xterm')).toBeVisible();
 	await workspace.getByRole('button', { name: 'Close tab Workspace test SSH · 1', exact: true }).click();
 	await expect(first).toHaveCount(0);
@@ -416,11 +433,11 @@ export async function verifyWorkspaceSessionPresentation(
 	await expect(files).toHaveCSS('transform', 'matrix(1.1, 0, 0, 1.1, 0, 0)');
 	await expect(terminalRows).toHaveCSS('font-size', `${fontSize + 1}px`);
 	await expect(commands).toHaveCount(0);
-	await expect(first).toHaveAttribute('aria-description', 'Marked for suspend');
-	await first.click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Unmark suspend', exact: true }).click();
-	await expect(first).toHaveAttribute('aria-description', 'Connected');
-	await workspace.getByRole('button', { name: 'Close tab Workspace test SSH · 1', exact: true }).click();
+	const resumedTab = workspace.getByRole('tab', { selected: true });
+	await expect(resumedTab).toHaveAttribute('aria-description', 'Marked for suspend');
+	await setMark(false, resumedTab);
+	const resumedLabel = await resumedTab.innerText();
+	await workspace.getByRole('button', { name: 'Close tab ' + resumedLabel.trim(), exact: true }).click();
 }
 
 export async function verifyTerminalSelection(workspace: Locator): Promise<void> {

@@ -335,8 +335,26 @@ export function useWorkspaceSessions(props: {
 			return;
 		marking.value = id;
 		try {
-			await request('sessions/' + id + '/mark', 'PATCH', { marked: !tab.markedForSuspend }, SessionSchema);
+			const confirmed = await request(
+				'sessions/' + id + '/mark',
+				'PATCH',
+				{ marked: !tab.markedForSuspend },
+				SessionSchema,
+			);
 			signal.throwIfAborted();
+
+			// The mutation response is authoritative for this field. Do not wait for
+			// the state socket to deliver the same mark, or replace newer metadata.
+			// A newer snapshot which already changed the mark wins.
+			const update = (item: SessionInfo) =>
+				item.id === confirmed.id && item.state === 'attached' && item.markedForSuspend === tab.markedForSuspend
+					? { ...item, markedForSuspend: confirmed.markedForSuspend }
+					: item;
+
+			if (confirmed.id === id && confirmed.state === 'attached') {
+				sessions.value = sessions.value.map(update);
+				tabs.value = tabs.value.map(update);
+			}
 		} catch (cause) {
 			report(cause);
 		} finally {

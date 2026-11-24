@@ -1477,7 +1477,7 @@ packages:
     engines: {node: '>=18'}
 
   nexus-terminal@file:vendor/nexus-terminal-1.1.0.tgz:
-    resolution: {integrity: sha512-9M1foDzNsQxhnlybAFm93qLudQyd/mmZHNuAd5JnubF36P2ERhNnVVOApcpv3EXqUeaXSGeccOKSijK+VIbo8Q==, tarball: file:vendor/nexus-terminal-1.1.0.tgz}
+    resolution: {integrity: sha512-vgzv+125ARwj6V3rTC+/2BEcu/VSPDFJGsKNEHMDN/hIlCBh/qjdUXYGbgCh7ILnDfTgzU5ODKJaMAWGD6F0kQ==, tarball: file:vendor/nexus-terminal-1.1.0.tgz}
     version: 1.1.0
     engines: {node: '>=26.13.1'}
     peerDependencies:

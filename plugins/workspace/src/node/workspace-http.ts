@@ -122,6 +122,45 @@ export function registerWorkspaceSessionHttp(
 				}),
 		},
 		{
+			method: 'delete',
+			path: '/sessions/:id/suspended',
+			input: postTransfersIdCancelInput,
+			output: z.strictObject({}),
+			status: 204,
+			lifetime,
+
+			handler: (input: z.output<typeof postTransfersIdCancelInput>, signal: AbortSignal) =>
+				workspaceHttp(log, signal, async () => {
+					await service.closeSuspended(input.id);
+					return {};
+				}),
+		},
+		{
+			method: 'patch',
+			path: '/sessions/:id/mark',
+			input: z.object({ id: z.uuid(), marked: z.boolean() }),
+			output: SessionSchema,
+			status: 200,
+			lifetime,
+
+			handler: (input: { id: string; marked: boolean }, signal: AbortSignal) =>
+				workspaceHttp(log, signal, async () => service.markForSuspend(input.id, input.marked)),
+		},
+		{
+			method: 'post',
+			path: '/sessions/:id/release',
+			input: suspendSessionInput,
+			output: z.strictObject({}),
+			status: 204,
+			lifetime,
+
+			handler: (input: z.output<typeof suspendSessionInput>, signal: AbortSignal) =>
+				workspaceHttp(log, signal, async () => {
+					await service.release(input.id, input.presentation);
+					return {};
+				}),
+		},
+		{
 			method: 'post',
 			path: '/sessions/:id/suspend',
 			input: suspendSessionInput,

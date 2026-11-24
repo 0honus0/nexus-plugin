@@ -2,7 +2,7 @@
 	import { Copy, KeyRound, Link2, Save, Trash2 } from '@lucide/vue';
 	import type { PluginWindowProps } from 'nexus-terminal/browser';
 	import { UiBadge, UiButton, UiDialog, UiField, UiInput, UiSection, UiSelect } from 'nexus-terminal/browser/ui';
-	import { computed, onMounted, ref, useId } from 'vue';
+	import { computed, onMounted, onScopeDispose, ref, useId } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
 		OidcBindingInputSchema,
@@ -12,7 +12,7 @@
 		type OidcBindingInput,
 	} from '../shared/oidc-http-types.js';
 	import { messages } from './messages.js';
-	import { bindOidcAccount, reportOidcFailure } from './oidc-client-api.js';
+	import { bindOidcAccount, reportOidcFailure, withOidcDeadline } from './oidc-client-api.js';
 
 	const { context, view } = defineProps<PluginWindowProps>();
 	const { t } = useI18n({ useScope: 'local', messages });
@@ -22,6 +22,8 @@
 	const form = ref<OidcBindingInput>(blankForm());
 	const working = ref(false);
 	const binding = ref(false);
+	const reading = ref(false);
+	let bindingRequest: AbortController | undefined;
 	const formDisabled = computed(() => !status.value || working.value || binding.value);
 	const confirming = ref(false);
 	const methods = computed(() => [
@@ -53,7 +55,9 @@
 	}
 
 	function loadStatus(signal: AbortSignal) {
-		return context.app.http.json('/configuration', OidcStatusSchema, { signal });
+		return withOidcDeadline(signal, (active) =>
+			context.app.http.json('/configuration', OidcStatusSchema, { signal: active }),
+		);
 	}
 
 	function apply(value: Awaited<ReturnType<typeof loadStatus>>) {
@@ -66,26 +70,54 @@
 		form.value = { ...provider, clientSecret: '' };
 	}
 
-	onMounted(async () => {
+	async function refreshStatus() {
+		if (reading.value || view.signal.aborted) return;
+		reading.value = true;
 		try {
 			const initial = await loadStatus(view.signal);
 			view.signal.throwIfAborted();
 			apply(initial);
 		} catch (cause) {
 			reportOidcFailure(context, cause, view.signal);
+		} finally {
+			reading.value = false;
 		}
+	}
+
+	onMounted(refreshStatus);
+
+	function cancelBinding() {
+		bindingRequest?.abort();
+		bindingRequest = undefined;
+		binding.value = false;
+	}
+
+	function pageShown(event: PageTransitionEvent) {
+		if (event.persisted) cancelBinding();
+	}
+
+	onMounted(() => window.addEventListener('pageshow', pageShown));
+	onScopeDispose(() => {
+		window.removeEventListener('pageshow', pageShown);
+		cancelBinding();
 	});
 
 	async function bind() {
 		const input = bindingInput.value;
 		if (formDisabled.value || !input.success) return;
+		const request = new AbortController();
+		bindingRequest = request;
+		const signal = AbortSignal.any([view.signal, context.signal, request.signal]);
 		binding.value = true;
 		try {
-			await bindOidcAccount(context, input.data, view.signal);
+			await bindOidcAccount(context, input.data, signal);
 		} catch (cause) {
-			reportOidcFailure(context, cause, view.signal);
+			reportOidcFailure(context, cause, signal);
 		} finally {
-			binding.value = false;
+			if (bindingRequest === request) {
+				bindingRequest = undefined;
+				binding.value = false;
+			}
 		}
 	}
 
@@ -120,7 +152,7 @@
 </script>
 
 <template>
-	<form class="oidc-app" :aria-busy="working || binding" @submit.prevent="bind">
+	<form class="oidc-app" :aria-busy="working || binding || reading" @submit.prevent="bind">
 		<UiSection :title="t('provider')" :icon="KeyRound">
 			<template v-if="status?.config" #actions>
 				<UiBadge tone="success" dot>{{ t('configured') }}</UiBadge>
@@ -216,7 +248,9 @@
 		</UiSection>
 		<div class="oidc-save">
 			<p :id="bindingHintId">{{ t('bindHint') }}</p>
+			<UiButton v-if="!status && !reading" type="button" block @click="refreshStatus">{{ t('retry') }}</UiButton>
 			<UiButton
+				v-else
 				type="submit"
 				tone="primary"
 				block
@@ -228,6 +262,7 @@
 				<template #leading><Save :size="16" /></template>
 				{{ t('save') }}
 			</UiButton>
+			<UiButton v-if="binding" type="button" block @click="cancelBinding">{{ t('cancel') }}</UiButton>
 		</div>
 		<UiDialog
 			:open="confirming"

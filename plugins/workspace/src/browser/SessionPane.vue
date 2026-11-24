@@ -1,5 +1,6 @@
 <script setup lang="ts">
-	import { onScopeDispose } from 'vue';
+	import { onScopeDispose, watch } from 'vue';
+	import type { AttachmentStatus } from './session-tab-status';
 	import { useCommandTargets } from './commands/command-targets';
 	import type { PluginContextApi } from 'nexus-terminal/browser';
 	import type { PluginWindowApi } from 'nexus-terminal/browser';
@@ -16,9 +17,30 @@
 		view: PluginWindowApi;
 		i18n: WorkspaceI18n;
 	}>();
-	const emit = defineEmits<{ busy: [value: boolean] }>();
+	const emit = defineEmits<{ busy: [value: boolean]; attachment: [value: AttachmentStatus] }>();
 	const transport = useSessionTransport(props.ctx, props.session.id, props.view.signal);
 	const input = createTerminalInput(transport);
+	let attached = false;
+	watch(
+		[transport.connected, transport.connecting, transport.terminalClosed],
+		([connected, connecting, closed]) => {
+			if (connected) attached = true;
+			emit(
+				'attachment',
+				closed
+					? 'disconnected'
+					: connected
+						? 'connected'
+						: connecting
+							? attached
+								? 'reconnecting'
+								: 'connecting'
+							: 'disconnected',
+			);
+		},
+		{ immediate: true, flush: 'sync' },
+	);
+
 	onScopeDispose(
 		useCommandTargets().register(props.session.id, {
 			name: props.session.name,

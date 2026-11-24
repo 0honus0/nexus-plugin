@@ -1,10 +1,9 @@
 # SDK 测试插件
 
-测试使用宿主 `v0.0.1-dev` 镜像和同次构建的 SDK `1.0.0`。SDK 压缩包固定在仓库的 `vendor/`，安装和构建无需链接本体源码。格式化继续共用本体的 `@nexus-terminal/format` 工具。
+测试使用宿主 `v0.0.15-dev` 对应镜像和 SDK `1.2.0`。SDK 压缩包固定在仓库的 `vendor/`，安装和构建无需链接本体源码。格式化继续共用本体的 `@nexus-terminal/format` 工具。
 
-- [发布流水线的 SDK 构建产物](https://github.com/0honus0/nexus-terminal/actions/runs/44474495877/artifacts/14505364246)
-- SDK 压缩包 SHA-256 为 `43da6341e7a2bad88498db0a47910f4ddf02b870f325e4cbe84c0d1e584c9f68`
-- 默认镜像为 `ghcr.io/0honus0/nexus-terminal:v0.0.1-dev`，可用 `NEXUS_TEST_IMAGE` 指定兼容镜像
+- 默认镜像由 `scripts/ci/host-image.txt` 固定到本体发布提交，可用 `NEXUS_TEST_IMAGE` 指定兼容镜像。
+- SDK 压缩包为 `vendor/nexus-terminal-1.2.0.tgz`，完整性由锁文件校验。
 
 ## 运行
 

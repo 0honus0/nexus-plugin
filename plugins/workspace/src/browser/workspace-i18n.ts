@@ -19,9 +19,17 @@ export function registerWorkspaceNotices(ctx: PluginContextApi): void {
 	ctx.onDispose(unregister);
 }
 
+function workspaceLanguage(locale: string) {
+	return locale.startsWith('zh') ? 'zh-CN' : 'en';
+}
+
+export function workspaceTitle(locale = 'en'): string {
+	return messages[workspaceLanguage(locale)].title;
+}
+
 export function createWorkspaceI18n(locale: Readonly<Ref<string>>) {
 	const i18n = createI18n({ legacy: false, locale: 'en', fallbackLocale: 'en', messages });
-	const language = computed(() => (locale.value.startsWith('zh') ? 'zh-CN' : 'en'));
+	const language = computed(() => workspaceLanguage(locale.value));
 
 	const t = (key: string, params: Record<string, string | number> = {}) =>
 		i18n.global.t(key, params, { locale: language.value });

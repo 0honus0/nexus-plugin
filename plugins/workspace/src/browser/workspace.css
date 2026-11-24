@@ -300,6 +300,12 @@
 	font-size: 13px;
 	font-weight: 550;
 }
+.workspace-suspended-card.ui-card {
+	--ui-card-background: color-mix(in srgb, var(--ui-warning) 5%, var(--ui-surface));
+}
+.workspace-suspended-card .ui-card__actions:only-child {
+	margin-top: 0;
+}
 .workspace-suspended h3 > svg {
 	color: var(--ui-primary);
 }
@@ -1167,16 +1173,4 @@
 }
 .workspace-terminal-echo-active .xterm-cursor {
 	visibility: hidden;
-}
-
-.workspace-desktop-tile {
-	--ui-action-card-background: color-mix(in srgb, var(--ui-primary) 10%, var(--ui-surface));
-}
-
-.workspace-desktop-tile .ui-action-card__content {
-	display: grid;
-	place-content: center;
-	justify-items: center;
-	gap: 8px;
-	font-size: 11px;
 }

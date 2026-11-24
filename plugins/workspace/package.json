@@ -1,6 +1,6 @@
 {
   "name": "@nexus-terminal/workspace",
-  "version": "0.0.1-dev.4",
+  "version": "0.0.1-dev.5",
   "type": "module",
   "description": "SSH terminals, files, server status and quick commands",
   "files": [
@@ -14,7 +14,7 @@
     "test": "pnpm build && vitest run"
   },
   "peerDependencies": {
-    "nexus-terminal": "^1.1.0"
+    "nexus-terminal": "^1.2.0"
   },
   "nexus": {
     "kind": "application",
@@ -31,6 +31,7 @@
     },
     "i18n": {
       "zh-CN": {
+        "displayName": "连接空间",
         "description": "SSH 终端、文件管理、服务器状态和快捷指令"
       }
     }

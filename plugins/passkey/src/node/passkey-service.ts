@@ -62,14 +62,17 @@ export class PasskeyService {
 	}
 
 	async startRegistration(origin: string, signal: AbortSignal) {
+		const account = await this.context.authMethods?.getAccount(signal);
+		signal.throwIfAborted();
+		if (!account) throw new HttpFailure(409, 'AUTH_ACCOUNT_UNINITIALIZED');
 		const registered = await this.storage.registrationCredentials(origin);
 		const userHandle = registered[0]?.user_handle ?? this.#ownerHandle;
 		const options = await generateRegistrationOptions({
 			rpName: 'Nexus Terminal',
 			rpID: new URL(origin).hostname,
 			userID: Uint8Array.from(Buffer.from(userHandle, 'base64url')),
-			userName: 'owner',
-			userDisplayName: 'Nexus Terminal',
+			userName: account.username,
+			userDisplayName: account.username,
 			excludeCredentials: registered.map(({ id }) => ({ id })),
 			authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
 			attestationType: 'none',

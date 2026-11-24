@@ -56,7 +56,7 @@ interface Session {
 	files: ReturnType<typeof createWorkspaceFiles>;
 }
 
-/** Sessions survive the frontend only after explicit suspend. Abnormal disconnect gets a 10-second reconnect grace; ordinary close destroys immediately. */
+/** Marked sessions survive frontend detach; unmarked sessions retain the existing reconnect grace. */
 export class WorkspaceService {
 	readonly #storage: WorkspaceStorage;
 	readonly #sessions = new Map<string, Session>();
@@ -170,10 +170,48 @@ export class WorkspaceService {
 		void this.close(id).catch(() => {});
 	}
 
+	#releaseInBackground(id: string) {
+		void this.release(id).catch((cause) =>
+			this.log.report({
+				level: 'error',
+				code: 'WORKSPACE_OPERATION_FAILED',
+				params: {
+					causeCode: String(describeWorkspaceError(cause, 'close', 'WORKSPACE_OPERATION_FAILED').code),
+				},
+			}),
+		);
+	}
+
+	markForSuspend(id: string, marked: boolean): SessionInfo {
+		const s = this.#get(id);
+		if (s.suspending || s.info.state !== 'attached' || s.terminalClosed)
+			throw new WorkspaceError('WORKSPACE_SESSION_BUSY', 409);
+		s.info.markedForSuspend = marked;
+		this.#changed();
+		return { ...s.info };
+	}
+
+	closeSuspended(id: string): Promise<void> {
+		const s = this.#sessions.get(id);
+		if (!s || s.closed) return Promise.resolve();
+		if (s.info.state !== 'suspended' || s.attaching || s.suspending)
+			throw new WorkspaceError('WORKSPACE_SESSION_BUSY', 409);
+		return this.close(id);
+	}
+
+	async release(id: string, presentation?: WorkspaceSessionPresentation): Promise<void> {
+		const s = this.#sessions.get(id);
+		if (!s || s.closed) return;
+		if (s.suspending) throw new WorkspaceError('WORKSPACE_SESSION_BUSY', 409);
+		if (s.info.state === 'suspended') return;
+		if (s.info.markedForSuspend) await this.suspend(id, presentation);
+		else await this.close(id);
+	}
+
 	#grace(s: Session) {
 		clearTimeout(s.timer);
 		s.timer = setTimeout(() => {
-			this.#closeInBackground(s.info.id);
+			this.#releaseInBackground(s.info.id);
 		}, 10000);
 		s.timer.unref();
 	}
@@ -263,6 +301,7 @@ export class WorkspaceService {
 					connectionId: config.id,
 					name: config.name,
 					state: 'disconnected',
+					markedForSuspend: false,
 					terminal: 'running',
 					transfers: 0,
 					createdAt: Date.now(),
@@ -384,7 +423,7 @@ export class WorkspaceService {
 			if (s.attaching === socket) {
 				s.attaching = undefined;
 				if (!s.closed) {
-					if (code === 1000) this.#closeInBackground(id);
+					if (code === 1000) this.#releaseInBackground(id);
 					else this.#grace(s);
 				}
 				return;
@@ -394,9 +433,9 @@ export class WorkspaceService {
 			s.output.check();
 			s.directory.release();
 			s.status.stop();
-			if (s.closed || s.info.state === 'suspended') return;
+			if (s.closed || s.suspending || s.info.state === 'suspended') return;
 			if (code === 1000) {
-				this.#closeInBackground(id);
+				this.#releaseInBackground(id);
 				return;
 			}
 			s.info.state = 'disconnected';
@@ -404,6 +443,7 @@ export class WorkspaceService {
 			this.#changed();
 		});
 		s.queue = s.queue.then(() => {
+			if (s.attaching !== socket) return;
 			s.attaching = undefined;
 			if (s.closed || socket.readyState !== 1) return;
 			s.socket = socket;
@@ -422,11 +462,11 @@ export class WorkspaceService {
 		});
 		await s.queue;
 		if (socket.readyState !== 1) {
-			if (!s.closed) this.#grace(s);
+			if (!s.closed && !s.suspending && !s.attaching && !s.socket && s.info.state !== 'suspended') this.#grace(s);
 			return;
 		}
 		socket.on('message', (data, binary) => {
-			if (s.closed || s.socket !== socket) return;
+			if (s.closed || s.suspending || s.socket !== socket) return;
 			let value;
 			try {
 				value = TerminalInputSchema.parse(JSON.parse(data.toString()));
@@ -439,7 +479,7 @@ export class WorkspaceService {
 				return;
 			}
 			if (value.type === 'close') {
-				this.#closeInBackground(id);
+				this.#releaseInBackground(id);
 				return;
 			}
 			if (s.terminalClosed) return;
@@ -482,7 +522,8 @@ export class WorkspaceService {
 		const s = this.#get(id);
 		if (s.attaching || s.suspending) throw new WorkspaceError('WORKSPACE_SESSION_BUSY', 409);
 		s.suspending = true;
-		s.info.state = 'suspended';
+		const previousState = s.info.state;
+		s.info.markedForSuspend = true;
 		s.status.stop();
 		clearTimeout(s.timer);
 		try {
@@ -490,11 +531,26 @@ export class WorkspaceService {
 			await s.files.cancelTransfers();
 			if (s.closed) throw new WorkspaceError('WORKSPACE_SESSION_NOT_FOUND', 404);
 			if (presentation) s.info.presentation = presentation;
+			s.info.state = 'suspended';
+			s.directory.release();
 			s.socket?.close(1000);
 			s.socket = undefined;
 			s.output.check();
 			this.#changed();
 			return { ...s.info };
+		} catch (cause) {
+			if (!s.closed) {
+				// If the consumer disappeared during suspension, preserve the marked session.
+				s.info.state = s.socket?.readyState === 1 ? previousState : 'suspended';
+				if (s.info.state === 'suspended') {
+					s.directory.release();
+					s.socket?.close(1000);
+					s.socket = undefined;
+					s.output.check();
+				}
+				this.#changed();
+			}
+			throw cause;
 		} finally {
 			s.suspending = false;
 		}
@@ -513,6 +569,8 @@ export class WorkspaceService {
 	async startFileTransfer(destinationId: string, input: FileTransfer) {
 		const from = this.#get(input.sourceSessionId),
 			to = this.#get(destinationId);
+		if (from.suspending || to.suspending || from.info.state === 'suspended' || to.info.state === 'suspended')
+			throw new WorkspaceError('WORKSPACE_SESSION_SUSPENDED', 409);
 		// Fast root-level conflict check preserves the existing explicit overwrite confirmation.
 		if (!input.overwrite) {
 			const target = await to.files.list(input.destination);
@@ -536,7 +594,12 @@ export class WorkspaceService {
 			async (progress, overwrite) => {
 				const source = this.#get(input.sourceSessionId),
 					destination = this.#get(destinationId);
-				if (source.info.state === 'suspended' || destination.info.state === 'suspended')
+				if (
+					source.suspending ||
+					destination.suspending ||
+					source.info.state === 'suspended' ||
+					destination.info.state === 'suspended'
+				)
 					throw new WorkspaceError('WORKSPACE_SESSION_SUSPENDED', 409);
 				const sameServer = source.serverIdentity === destination.serverIdentity;
 				await source.files.transferTo(
@@ -592,13 +655,15 @@ export class WorkspaceService {
 
 	attachStatus(id: string, socket: WebSocket): void {
 		const session = this.#get(id);
-		if (session.info.state !== 'attached') throw new WorkspaceError('WORKSPACE_SESSION_SUSPENDED', 409);
+		if (session.suspending || session.info.state !== 'attached')
+			throw new WorkspaceError('WORKSPACE_SESSION_SUSPENDED', 409);
 		session.status.attach(socket);
 	}
 
 	sessionFiles(id: string) {
 		const session = this.#get(id);
-		if (session.info.state === 'suspended') throw new WorkspaceError('WORKSPACE_SESSION_SUSPENDED', 409);
+		if (session.suspending || session.info.state === 'suspended')
+			throw new WorkspaceError('WORKSPACE_SESSION_SUSPENDED', 409);
 		return {
 			name: session.info.name,
 			files: session.files,

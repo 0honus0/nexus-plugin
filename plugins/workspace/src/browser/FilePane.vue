@@ -32,6 +32,7 @@
 	import type { PluginWindowApi } from 'nexus-terminal/browser';
 	import type { WorkspaceI18n } from './workspace-i18n';
 	import type { FileEntry } from '../shared/workspace-file-types';
+	import { TerminalDirectorySchema } from '../shared/workspace-file-operation-types';
 	import { useFileSearch } from './files/use-file-search';
 	import FileIcon from './files/FileIcon.vue';
 	import { filesPresentation } from './files/files-presentation';
@@ -64,7 +65,7 @@
 		() => props.enabled,
 		() => props.connected,
 	);
-	const { path, loaded, loading, mutating, busy } = files;
+	const { path, loaded, loading, showRefreshLoading, mutating, busy } = files;
 	const catalog = useWorkspaceCatalog();
 	const operations = useFileOperations(
 		props.ctx,
@@ -273,15 +274,17 @@
 	}
 
 	async function synchronize(direction: 'toTerminal' | 'fromTerminal') {
-		if (syncing.value) return;
+		if (syncing.value || !props.enabled || !props.connected || signal.aborted) return;
 		syncing.value = direction;
 		try {
-			const value = (await client.request(
-				'sessions/' + props.sessionId + '/terminal-directory',
-				direction === 'toTerminal' ? 'POST' : 'GET',
-				direction === 'toTerminal' ? { path: path.value } : undefined,
-			)) as { path: string };
-			if (direction === 'fromTerminal') await files.load(value.path);
+			if (direction === 'fromTerminal') await files.followTerminal();
+			else
+				await client.request(
+					'sessions/' + props.sessionId + '/terminal-directory',
+					'POST',
+					{ path: path.value },
+					TerminalDirectorySchema,
+				);
 		} catch (cause) {
 			client.report(cause);
 		} finally {
@@ -412,7 +415,8 @@
 					icon-only
 					:aria-label="t('refreshFiles')"
 					:title="t('refreshFiles')"
-					:loading="loading"
+					:loading="showRefreshLoading"
+					loading-animation="spinner"
 					:disabled="!enabled"
 					@click="files.load()"
 					><RefreshCw :size="16"
@@ -451,7 +455,8 @@
 					:aria-label="t('filesMenu.terminalToFiles')"
 					:title="t('filesMenu.terminalToFiles')"
 					:loading="syncing === 'toTerminal'"
-					:disabled="!enabled || !loaded || !!syncing"
+					loading-animation="spinner"
+					:disabled="!enabled || !connected || !loaded || !!syncing"
 					@click="synchronize('toTerminal')"
 					><Terminal :size="16"
 				/></UiButton>
@@ -461,7 +466,8 @@
 					:aria-label="t('filesMenu.filesToTerminal')"
 					:title="t('filesMenu.filesToTerminal')"
 					:loading="syncing === 'fromTerminal'"
-					:disabled="!enabled || !!syncing"
+					loading-animation="spinner"
+					:disabled="!enabled || !connected || !!syncing"
 					@click="synchronize('fromTerminal')"
 					><FolderSync :size="16"
 				/></UiButton>

@@ -1,6 +1,7 @@
 import { useWorkspaceTransfers } from './transfers/workspace-transfers';
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import type { PluginContextApi } from 'nexus-terminal/browser';
+import { TerminalDirectorySchema } from '../shared/workspace-file-operation-types';
 import { DirectorySchema, type FileEntry } from '../shared/workspace-file-types';
 import { createDirectoryCache } from './files/directory-cache';
 import { useWorkspaceFilesState } from './files/workspace-files-state';
@@ -24,6 +25,7 @@ export function useFiles(
 		entries = shallowRef<FileEntry[]>([]),
 		loaded = ref(false),
 		loading = ref(false),
+		loadingOrigin = ref<'navigation' | 'terminal' | 'background'>(),
 		mutating = ref(false);
 	let revision = 0,
 		appliedRevision = -1;
@@ -34,6 +36,11 @@ export function useFiles(
 	let prefetchRevision = 0;
 	const transfers = useWorkspaceTransfers();
 	const busy = computed(() => mutating.value);
+	const showRefreshLoading = computed(
+		() =>
+			loading.value &&
+			(loadingOrigin.value === 'navigation' || (loadingOrigin.value === 'background' && !loaded.value)),
+	);
 
 	const directoryCache = createDirectoryCache(
 		(remote, requestSignal) =>
@@ -92,13 +99,15 @@ export function useFiles(
 		revision++;
 		appliedRevision = -1;
 		loading.value = false;
+		loadingOrigin.value = undefined;
 	}
 
-	async function navigate(remote: string) {
+	async function navigate(remote: string, origin: 'navigation' | 'terminal' | 'background' = 'navigation') {
 		cancelPrefetch();
 		const current = ++revision;
 		requestedPath = remote;
 		const cached = directoryCache.get(remote);
+		loadingOrigin.value = origin;
 		loading.value = !cached;
 		try {
 			const value = cached ?? (await directoryCache.read(remote));
@@ -114,7 +123,10 @@ export function useFiles(
 			requestedPath = path.value;
 			client.report(cause);
 		} finally {
-			if (current === revision) loading.value = false;
+			if (current === revision) {
+				loading.value = false;
+				loadingOrigin.value = undefined;
+			}
 		}
 	}
 
@@ -122,6 +134,24 @@ export function useFiles(
 		if (!enabled() || signal.aborted) return;
 		if (remote === undefined) invalidate();
 		return navigate(remote ?? requestedPath);
+	}
+
+	/** CWD lookup must not supersede a newer directory navigation. */
+	async function followTerminal() {
+		if (!enabled() || !connected() || signal.aborted) return;
+		const current = revision;
+		try {
+			const { path: remote } = await client.request(
+				root + '/terminal-directory',
+				'GET',
+				undefined,
+				TerminalDirectorySchema,
+			);
+			if (current !== revision || !enabled() || !connected() || signal.aborted) return;
+			return navigate(remote, 'terminal');
+		} catch (cause) {
+			if (current === revision && !signal.aborted) client.report(cause);
+		}
 	}
 
 	function upload(files: FileList | File[]) {
@@ -144,7 +174,7 @@ export function useFiles(
 			if ((wasOnline && !online) || (previous !== undefined && current !== previous)) invalidate();
 			if (!active) cancelPrefetch();
 			if (active && online && !signal.aborted && appliedRevision !== current && !loading.value)
-				void navigate(requestedPath);
+				void navigate(requestedPath, 'background');
 		},
 		{ immediate: true, flush: 'sync' },
 	);
@@ -157,9 +187,11 @@ export function useFiles(
 		entries,
 		loaded,
 		loading,
+		showRefreshLoading,
 		mutating,
 		busy,
 		load,
+		followTerminal,
 		prefetch,
 		cancelPrefetch,
 		upload,

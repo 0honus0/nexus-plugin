@@ -25,6 +25,8 @@ jobs:
         working-directory: home/nexus-plugin
         run: git merge-base --is-ancestor HEAD refs/remotes/origin/main
       - uses: ./home/nexus-plugin/.github/actions/setup
+        with:
+          test-host: 'true'
       - name: Test and pack tagged plugin
         working-directory: home/nexus-plugin
         env:

@@ -220,6 +220,28 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	]) {
 		await expect(toolbar.getByRole('button', { name, exact: true })).toHaveAttribute('title', name);
 	}
+	const follow = toolbar.getByRole('button', { name: 'Follow terminal directory', exact: true });
+	const refresh = toolbar.getByRole('button', { name: 'Refresh directory', exact: true });
+	const releaseFollow = Promise.withResolvers<void>();
+	const directorySync = '**/terminal-directory';
+	await page.route(directorySync, async (route) => {
+		await releaseFollow.promise;
+		await route.fulfill({ json: { path: '/' } });
+	});
+	try {
+		await follow.click();
+		await expect(follow).toHaveAttribute('data-loading-animation', 'spinner');
+		await expect(follow).toBeDisabled();
+		await expect(refresh).not.toHaveAttribute('aria-busy', 'true');
+		await expect(entry).toBeVisible();
+		releaseFollow.resolve();
+		await expect(follow).toBeEnabled();
+		await expect(follow).not.toHaveAttribute('data-loading-animation', 'spinner');
+		await expect(entry).toBeVisible();
+	} finally {
+		releaseFollow.resolve();
+		await page.unroute(directorySync);
+	}
 	const favorites = toolbar.getByRole('button', { name: 'Favorite paths' });
 	const manageFavorites = page.getByRole('dialog', { name: 'Favorite paths' });
 	await favorites.click();
@@ -374,7 +396,10 @@ export async function verifyWorkspaceSessionPresentation(
 	await active.locator('.workspace-terminal').dispatchEvent('wheel', { ctrlKey: true, deltaY: -90 });
 	await expect(terminalRows).toHaveCSS('font-size', `${fontSize + 1}px`);
 	await first.click({ button: 'right' });
-	await page.getByRole('menuitem', { name: 'Suspend session', exact: true }).click();
+	await page.getByRole('menuitem', { name: 'Mark for suspend', exact: true }).click();
+	await expect(first).toHaveAttribute('aria-description', 'Marked for suspend');
+	await expect(active.locator('.xterm')).toBeVisible();
+	await workspace.getByRole('button', { name: 'Close tab Workspace test SSH · 1', exact: true }).click();
 	await expect(first).toHaveCount(0);
 	await workspace.getByRole('button', { name: 'New session', exact: true }).click();
 	const resume = workspace.getByRole('button', { name: 'Resume · Workspace test SSH', exact: true });
@@ -391,6 +416,10 @@ export async function verifyWorkspaceSessionPresentation(
 	await expect(files).toHaveCSS('transform', 'matrix(1.1, 0, 0, 1.1, 0, 0)');
 	await expect(terminalRows).toHaveCSS('font-size', `${fontSize + 1}px`);
 	await expect(commands).toHaveCount(0);
+	await expect(first).toHaveAttribute('aria-description', 'Marked for suspend');
+	await first.click({ button: 'right' });
+	await page.getByRole('menuitem', { name: 'Unmark suspend', exact: true }).click();
+	await expect(first).toHaveAttribute('aria-description', 'Connected');
 	await workspace.getByRole('button', { name: 'Close tab Workspace test SSH · 1', exact: true }).click();
 }
 

@@ -1,5 +1,9 @@
 name: Set up plugin repository
 description: Install pinned Node, pnpm and the shared host format tool
+inputs:
+  test-host:
+    description: Pull the matching host image before integration tests
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -22,3 +26,23 @@ runs:
     - run: pnpm install --frozen-lockfile
       shell: bash
       working-directory: home/nexus-plugin
+
+    - name: Wait for matching host image
+      if: inputs.test-host == 'true'
+      shell: bash
+      working-directory: home/nexus-plugin
+      run: |
+        set -euo pipefail
+        image="$(cat scripts/ci/host-image.txt)"
+        # A coordinated release can start plugin CI before the host image is published.
+        # Do not fall back to a moving dev tag or an older SDK.
+        for attempt in $(seq 1 60); do
+          if timeout 15 docker manifest inspect "$image" >/dev/null 2>&1; then
+            docker pull "$image"
+            exit 0
+          fi
+          echo "Waiting for matching host image ($attempt/60): $image"
+          sleep 10
+        done
+        echo "Matching host image is unavailable: $image" >&2
+        exit 1

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 	import { provide } from 'vue';
+	import type { AttachmentStatus } from './session-tab-status';
 	import type { Connection } from '@nexus-terminal/connections/connections-client-api';
 	import type { PluginContextApi, PluginWindowApi } from 'nexus-terminal/browser';
 	import type { SessionInfo } from '../shared/workspace-types';
@@ -16,7 +17,10 @@
 		view: PluginWindowApi;
 		i18n: WorkspaceI18n;
 	}>();
-	const emit = defineEmits<{ busy: [id: string, value: boolean] }>();
+	const emit = defineEmits<{
+		busy: [id: string, value: boolean];
+		attachment: [id: string, value: AttachmentStatus];
+	}>();
 
 	// 各会话共用这组设置和工具，首次连接前不初始化。
 	provide(workspaceBackgroundKey, createWorkspaceBackground(props.ctx, props.view));
@@ -40,6 +44,7 @@
 			:view="view"
 			:i18n="i18n"
 			@busy="(value) => emit('busy', tab.id, value)"
+			@attachment="(value) => emit('attachment', tab.id, value)"
 		/>
 	</div>
 </template>

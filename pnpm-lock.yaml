@@ -230,8 +230,8 @@ importers:
         specifier: ^0.29.9
         version: 0.29.9
       nexus-terminal:
-        specifier: file:vendor/nexus-terminal-1.1.0.tgz
-        version: file:vendor/nexus-terminal-1.1.0.tgz(@lucide/vue@1.72.0(vue@3.5.45(typescript@6.0.3)))(@vueuse/core@15.0.0(vue@3.5.45(typescript@6.0.3)))(interactjs@1.10.28)(kysely@0.29.9)(motion-v@2.12.0(@vueuse/core@15.0.0(vue@3.5.45(typescript@6.0.3)))(vue@3.5.45(typescript@6.0.3)))(neverthrow@8.2.0)(reka-ui@2.11.0(vue@3.5.45(typescript@6.0.3)))(vue@3.5.45(typescript@6.0.3))(zod@4.6.7)
+        specifier: file:vendor/nexus-terminal-1.2.0.tgz
+        version: file:vendor/nexus-terminal-1.2.0.tgz(@lucide/vue@1.72.0(vue@3.5.45(typescript@6.0.3)))(@vueuse/core@15.0.0(vue@3.5.45(typescript@6.0.3)))(interactjs@1.10.28)(kysely@0.29.9)(motion-v@2.12.0(@vueuse/core@15.0.0(vue@3.5.45(typescript@6.0.3)))(vue@3.5.45(typescript@6.0.3)))(neverthrow@8.2.0)(reka-ui@2.11.0(vue@3.5.45(typescript@6.0.3)))(vue@3.5.45(typescript@6.0.3))(zod@4.6.7)
       openid-client:
         specifier: 6.9.0
         version: 6.9.0
@@ -1466,9 +1466,9 @@ packages:
     resolution: {integrity: sha512-kOCT/1MCPAxY5iUV3wytNFUMUolzuwd/VF/1KCx7kf6CutrOsTie+84zTGTpgQycjvfLdBBdvBvFLqFD2c0wkQ==}
     engines: {node: '>=18'}
 
-  nexus-terminal@file:vendor/nexus-terminal-1.1.0.tgz:
-    resolution: {integrity: sha512-vgzv+125ARwj6V3rTC+/2BEcu/VSPDFJGsKNEHMDN/hIlCBh/qjdUXYGbgCh7ILnDfTgzU5ODKJaMAWGD6F0kQ==, tarball: file:vendor/nexus-terminal-1.1.0.tgz}
-    version: 1.1.0
+  nexus-terminal@file:vendor/nexus-terminal-1.2.0.tgz:
+    resolution: {integrity: sha512-Zk7vPT3ZwrXlz6gWqnVD1lji8HVMV41Y5OtGkzA9CAoFOw3o9cjTWXmvZ/tzx46UP+0nkwomRTV15+hD9Gf/7w==, tarball: file:vendor/nexus-terminal-1.2.0.tgz}
+    version: 1.2.0
     engines: {node: '>=26.13.1'}
     peerDependencies:
       '@lucide/vue': 1.72.0
@@ -3010,7 +3010,7 @@ snapshots:
     optionalDependencies:
       '@rollup/rollup-linux-x64-gnu': 4.68.5
 
-  nexus-terminal@file:vendor/nexus-terminal-1.1.0.tgz(@lucide/vue@1.72.0(vue@3.5.45(typescript@6.0.3)))(@vueuse/core@15.0.0(vue@3.5.45(typescript@6.0.3)))(interactjs@1.10.28)(kysely@0.29.9)(motion-v@2.12.0(@vueuse/core@15.0.0(vue@3.5.45(typescript@6.0.3)))(vue@3.5.45(typescript@6.0.3)))(neverthrow@8.2.0)(reka-ui@2.11.0(vue@3.5.45(typescript@6.0.3)))(vue@3.5.45(typescript@6.0.3))(zod@4.6.7):
+  nexus-terminal@file:vendor/nexus-terminal-1.2.0.tgz(@lucide/vue@1.72.0(vue@3.5.45(typescript@6.0.3)))(@vueuse/core@15.0.0(vue@3.5.45(typescript@6.0.3)))(interactjs@1.10.28)(kysely@0.29.9)(motion-v@2.12.0(@vueuse/core@15.0.0(vue@3.5.45(typescript@6.0.3)))(vue@3.5.45(typescript@6.0.3)))(neverthrow@8.2.0)(reka-ui@2.11.0(vue@3.5.45(typescript@6.0.3)))(vue@3.5.45(typescript@6.0.3))(zod@4.6.7):
     dependencies:
       '@lucide/vue': 1.72.0(vue@3.5.45(typescript@6.0.3))
       '@types/express': 5.0.6

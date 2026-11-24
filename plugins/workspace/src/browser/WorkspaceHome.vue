@@ -90,11 +90,15 @@
 					v-for="session in suspended"
 					:key="session.id"
 					:title="session.name"
-					:description="t('suspended')"
+					class="workspace-suspended-card"
+					tone="warning"
 					:action-label="t('resume') + ' · ' + session.name"
 					:icon="Play"
 					@select="emit('resume', session)"
 				>
+					<template #tags
+						><UiBadge tone="warning" dot>{{ t('suspended') }}</UiBadge></template
+					>
 					<template #actions
 						><UiButton
 							appearance="ghost"

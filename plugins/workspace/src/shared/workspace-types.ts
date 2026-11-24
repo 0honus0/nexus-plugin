@@ -14,6 +14,7 @@ export const SessionSchema = z.object({
 	connectionId: z.uuid(),
 	name: z.string(),
 	state: z.enum(['attached', 'suspended', 'disconnected']),
+	markedForSuspend: z.boolean().optional(),
 	createdAt: z.number(),
 	terminal: z.enum(['running', 'closed']),
 	transfers: z.number().int().nonnegative(),

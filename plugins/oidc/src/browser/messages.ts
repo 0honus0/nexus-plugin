@@ -20,6 +20,7 @@ export const messages = {
 		bindHint: 'Sign in with your identity provider. Your configuration is saved after verification.',
 		remove: 'Clear configuration',
 		cancel: 'Cancel',
+		retry: 'Retry loading configuration',
 		removeTitle: 'Clear OpenID Connect configuration?',
 		copy: 'Copy {name}',
 		configured: 'Configured',
@@ -45,6 +46,7 @@ export const messages = {
 		bindHint: '在身份提供方登录一次，验证成功后会自动保存配置。',
 		remove: '清除配置',
 		cancel: '取消',
+		retry: '重新加载配置',
 		removeTitle: '清除 OpenID Connect 配置？',
 		copy: '复制{name}',
 		configured: '已配置',
@@ -54,6 +56,7 @@ export const messages = {
 export const notices = {
 	en: {
 		OIDC_OPERATION_FAILED: 'The OpenID Connect operation failed.',
+		OIDC_REQUEST_TIMEOUT: 'The OpenID Connect request timed out. Check the provider or network and try again.',
 		OIDC_SECRET_REQUIRED: 'Enter this client’s secret.',
 		OIDC_SECRET_UNAVAILABLE: 'Could not access the client secret.',
 		OIDC_DISCOVERY_FAILED: 'Could not load valid OpenID Connect metadata from the issuer.',
@@ -68,6 +71,7 @@ export const notices = {
 	},
 	zh: {
 		OIDC_OPERATION_FAILED: 'OpenID Connect 操作失败。',
+		OIDC_REQUEST_TIMEOUT: 'OpenID Connect 请求超时，请检查身份提供方或网络后重试。',
 		OIDC_SECRET_REQUIRED: '请输入此客户端的密钥。',
 		OIDC_SECRET_UNAVAILABLE: '无法读取或保存客户端密钥。',
 		OIDC_DISCOVERY_FAILED: '无法从签发方读取有效的 OpenID Connect 元数据。',

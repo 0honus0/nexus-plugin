@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useWindowSize } from '@vueuse/core';
-	import { Terminal, Home, Fingerprint, Pause, ArrowDownUp } from '@lucide/vue';
+	import { Terminal, Home, Fingerprint, Pause, Play, ArrowDownUp } from '@lucide/vue';
 	import { UiButton, UiDialog } from 'nexus-terminal/browser/ui';
 	import type { PluginContextApi } from 'nexus-terminal/browser';
 	import type { PluginWindowProps } from 'nexus-terminal/browser';
@@ -13,6 +13,7 @@
 	import WorkspaceLoading from './WorkspaceLoading.vue';
 	import WorkspaceHome from './WorkspaceHome.vue';
 	import { useWorkspaceSessions } from './use-workspace-sessions';
+	import { sessionTabStatus, type AttachmentStatus } from './session-tab-status';
 	import { createWorkspaceLayoutState, workspaceLayoutStateKey } from './presentation/workspace-layout-state';
 	const props = defineProps<PluginWindowProps & { ctx: PluginContextApi; i18n: WorkspaceI18n }>();
 	const { t } = props.i18n;
@@ -73,6 +74,13 @@
 		selected,
 		connecting,
 		suspending,
+		marking,
+		closingWindow,
+		suspendedClose,
+		removingSuspended,
+		requestCloseSuspended,
+		confirmCloseSuspended,
+		cancelCloseSuspended,
 		host,
 		busySessions,
 		confirmOpen,
@@ -82,7 +90,7 @@
 		add,
 		connect,
 		close,
-		suspend,
+		toggleSuspend,
 	} = useWorkspaceSessions({ ...props, hasTransfers: transfers.hasPending, prepareSuspend: layouts.prepareSuspend });
 
 	watch(
@@ -103,16 +111,38 @@
 
 	filesState = createWorkspaceFilesState(tabs, savedConnections, start);
 	provide(workspaceFilesStateKey, filesState);
+	const attachment = ref<Record<string, AttachmentStatus>>({});
+	watch(
+		() => tabs.value.map(({ id }) => id),
+		(ids) => {
+			attachment.value = Object.fromEntries(Object.entries(attachment.value).filter(([id]) => ids.includes(id)));
+		},
+	);
 	const windowTabs = computed(() => [
 		...(active.value === 'home' ? [{ id: 'home', label: t('connection'), icon: Home }] : []),
 		...tabs.value.map((tab) => {
 			const peers = tabs.value.filter((s) => s.connectionId === tab.connectionId);
+			const { key, tone, busy } = sessionTabStatus(tab, attachment.value[tab.id], suspending.value === tab.id);
 			return {
 				id: tab.id,
 				label: tab.name + (peers.length > 1 ? ' · ' + (peers.findIndex((s) => s.id === tab.id) + 1) : ''),
 				icon: Terminal,
 				closable: true,
-				menu: [{ id: 'suspend', label: t('suspend'), icon: Pause, disabled: suspending.value }],
+				status: { tone, busy, label: t('sessionStatus.' + key) },
+				menu: [
+					{
+						id: 'suspend',
+						label: t(tab.markedForSuspend ? 'unmarkSuspend' : 'suspend'),
+						icon: tab.markedForSuspend ? Play : Pause,
+						disabled:
+							!!suspending.value ||
+							!!marking.value ||
+							closingWindow.value ||
+							tab.state !== 'attached' ||
+							attachment.value[tab.id] !== 'connected' ||
+							tab.terminal === 'closed',
+					},
+				],
 			};
 		}),
 	]);
@@ -130,7 +160,7 @@
 			onClose: close,
 
 			onMenuSelect: (id, action) => {
-				if (action === 'suspend') return suspend(id);
+				if (action === 'suspend') return toggleSuspend(id);
 			},
 
 			onAdd: () => {
@@ -153,7 +183,7 @@
 			:i18n="i18n"
 			@connect="start"
 			@resume="add"
-			@close="close"
+			@close="requestCloseSuspended"
 			@manage="manage"
 			@retry="retryConnections"
 		/>
@@ -166,11 +196,28 @@
 				:view="view"
 				:i18n="i18n"
 				@busy="(id, value) => (busySessions[id] = value)"
+				@attachment="(id, value) => (attachment[id] = value)"
 			/>
 		</div>
 	</section>
 
 	<TransferCenter :transfers="transfers" :i18n="i18n" :narrow="narrowTransfers" />
+	<UiDialog
+		:open="!!suspendedClose"
+		:title="t('closeSession')"
+		:description="t('closeSuspendedHint', { name: suspendedClose?.name ?? '' })"
+		:close-label="t('cancel')"
+		:close-disabled="removingSuspended"
+		@update:open="(value) => !value && cancelCloseSuspended()"
+	>
+		<template #footer>
+			<UiButton :disabled="removingSuspended" @click="cancelCloseSuspended">{{ t('cancel') }}</UiButton>
+			<UiButton tone="danger" :loading="removingSuspended" @click="confirmCloseSuspended">{{
+				t('closeSession')
+			}}</UiButton>
+		</template>
+	</UiDialog>
+
 	<UiDialog
 		:open="confirmOpen"
 		:title="t('stopTransfers')"

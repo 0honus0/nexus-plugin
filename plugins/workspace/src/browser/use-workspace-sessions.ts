@@ -5,6 +5,7 @@ import type { Connection, ConnectionsClientApi } from '@nexus-terminal/connectio
 import {
 	SessionListResponseSchema,
 	SessionCreateResultSchema,
+	SessionSchema,
 	WorkspaceSessionsTopic,
 	type SessionInfo,
 } from '../shared/workspace-types';
@@ -24,17 +25,21 @@ export function useWorkspaceSessions(props: {
 		active = ref('home'),
 		selected = ref(''),
 		connecting = ref(false),
-		suspending = ref(false),
+		suspending = ref<string>(),
+		marking = ref<string>(),
+		closingWindow = ref(false),
 		host = ref<{ fingerprint: string; previousFingerprint?: string }>();
 	const controller = new AbortController(),
 		signal = AbortSignal.any([controller.signal, props.view.signal, props.ctx.signal]);
 	const { request, report } = createWorkspaceClient(props.ctx, signal);
-	const ownerClient = createWorkspaceClient(props.ctx, props.ctx.signal);
+
 	const busySessions = ref<Record<string, boolean>>({});
 	const connectionsLoaded = computed(() => readConnectionsState(false, (client) => client.loaded.value));
 	const connectionsReadFailed = ref(false);
 	let readConnections: (() => Promise<void>) | undefined;
 	const confirmOpen = ref(false);
+	const suspendedClose = ref<SessionInfo>();
+	const removingSuspended = ref(false);
 	let resolveConfirmation: ((value: boolean) => void) | undefined;
 
 	function readConnectionsState<Value>(fallback: Value, read: (client: ConnectionsClientApi) => Value): Value {
@@ -70,14 +75,34 @@ export function useWorkspaceSessions(props: {
 	}
 
 	const stopCloseCheck = props.view.onBeforeClose(async (event) => {
-		if (!(await confirmTransfers())) event.preventDefault();
+		if (
+			suspending.value ||
+			marking.value ||
+			removingSuspended.value ||
+			suspendedClose.value ||
+			connecting.value ||
+			closingWindow.value
+		) {
+			event.preventDefault();
+			return;
+		}
+		closingWindow.value = true;
+		try {
+			if (!(await confirmTransfers()) || signal.aborted) {
+				event.preventDefault();
+				return;
+			}
+			// Acknowledge release before disposing the terminal or its presentation.
+			for (const tab of [...tabs.value]) await releaseTab(tab.id);
+		} catch (cause) {
+			report(cause);
+			event.preventDefault();
+		} finally {
+			closingWindow.value = false;
+		}
 	});
-	props.view.onDispose(() => {
-		for (const tab of tabs.value)
-			props.ctx.app.tasks.background('close-workspace-session', () =>
-				ownerClient.request('sessions/' + tab.id, 'DELETE'),
-			);
-	});
+	// Forced disposal is handled by backend attachment close/grace. Never send a
+	// late unconditional DELETE: a marked session may already have been resumed.
 	const stop = props.ctx.use({ connections: ['@nexus-terminal/connections', 'connections'] }, (scope) => {
 		const readSignal = AbortSignal.any([signal, scope.signal]);
 		if (readSignal.aborted) return;
@@ -119,8 +144,10 @@ export function useWorkspaceSessions(props: {
 	function reconcileSessions(items: SessionInfo[]) {
 		sessions.value = items;
 		tabs.value = tabs.value.flatMap((tab) => {
-			const current = items.find((session) => session.id === tab.id && session.state !== 'suspended');
-			return current ? [current] : [];
+			const current = items.find((session) => session.id === tab.id);
+			// A resume can receive an older suspended snapshot before the terminal
+			// attachment acknowledgement. Retain only locally requested resumes.
+			return current && (current.state !== 'suspended' || tab.state === 'suspended') ? [current] : [];
 		});
 		busySessions.value = Object.fromEntries(
 			Object.entries(busySessions.value).filter(([id]) => tabs.value.some((session) => session.id === id)),
@@ -155,7 +182,9 @@ export function useWorkspaceSessions(props: {
 			client.catalog.value.connections.map((connection) => ({ ...connection, tags: [...connection.tags] })),
 		),
 	);
-	const suspended = computed(() => sessions.value.filter((s) => s.state === 'suspended'));
+	const suspended = computed(() =>
+		sessions.value.filter((s) => s.state === 'suspended' && !tabs.value.some((tab) => tab.id === s.id)),
+	);
 	watch(savedConnections, (items) => {
 		if (selected.value && !items.some((c) => c.id === selected.value)) {
 			selected.value = '';
@@ -172,7 +201,7 @@ export function useWorkspaceSessions(props: {
 	}
 
 	function start(id: string) {
-		if (connecting.value) return;
+		if (connecting.value || closingWindow.value || suspending.value) return;
 		const connection = savedConnections.value.find((c) => c.id === id);
 		if (!connection || connection.type !== 'ssh') return;
 		if (!connection.credentialId) {
@@ -197,12 +226,13 @@ export function useWorkspaceSessions(props: {
 	}
 
 	function add(session: SessionInfo) {
+		if (closingWindow.value || suspending.value || removingSuspended.value || suspendedClose.value) return;
 		if (!tabs.value.some((s) => s.id === session.id)) tabs.value.push(session);
 		active.value = session.id;
 	}
 
 	async function connect(fingerprint?: string) {
-		if (!selected.value || connecting.value) return;
+		if (!selected.value || connecting.value || closingWindow.value || suspending.value) return;
 		connecting.value = true;
 		try {
 			const { result: value } = await request(
@@ -230,46 +260,87 @@ export function useWorkspaceSessions(props: {
 		}
 	}
 
-	async function close(id: string) {
-		if (suspending.value || !(await confirmTransfers(id)) || signal.aborted) return;
-		// Revoke the visible tab immediately. The plugin, not the closing component,
-		// owns the DELETE; terminal WS close also revokes the backend session.
-		tabs.value = tabs.value.filter((s) => s.id !== id);
-		if (active.value === id) active.value = tabs.value[0]?.id ?? 'home';
-		props.ctx.app.tasks.background('close-workspace-session', () =>
-			ownerClient.request('sessions/' + id, 'DELETE'),
-		);
+	async function releaseTab(id: string) {
+		const tab = tabs.value.find((item) => item.id === id);
+		if (!tab) return;
+		suspending.value = id;
+		try {
+			const presentation = await props.prepareSuspend?.(id);
+			signal.throwIfAborted();
+			// The backend decides whether to suspend using its confirmed mark.
+			await request('sessions/' + id + '/release', 'POST', { presentation });
+			signal.throwIfAborted();
+			tabs.value = tabs.value.filter((item) => item.id !== id);
+			if (active.value === id) active.value = tabs.value[0]?.id ?? 'home';
+		} finally {
+			suspending.value = undefined;
+		}
 	}
 
-	async function suspend(id: string) {
+	async function close(id: string) {
 		if (
-			!tabs.value.some((tab) => tab.id === id) ||
 			suspending.value ||
+			marking.value ||
+			closingWindow.value ||
+			suspendedClose.value ||
+			connecting.value ||
 			!(await confirmTransfers(id)) ||
 			signal.aborted
 		)
 			return;
-		suspending.value = true;
 		try {
-			// Suspension changes ownership. Finish its acknowledgement and detach the
-			// local tab before an ordinary window close can clean up remaining tabs.
-			await props.ctx.app.tasks.run(
-				async (lifetime) => {
-					const presentation = await props.prepareSuspend?.(id);
-					lifetime.throwIfAborted();
-					await createWorkspaceClient(props.ctx, lifetime).request('sessions/' + id + '/suspend', 'POST', {
-						presentation,
-					});
-					lifetime.throwIfAborted();
-					tabs.value = tabs.value.filter((s) => s.id !== id);
-					if (active.value === id) active.value = 'home';
-				},
-				{ view: props.view },
-			);
-		} catch (e) {
-			report(e);
+			if (suspending.value || marking.value || closingWindow.value || connecting.value) return;
+			await releaseTab(id);
+		} catch (cause) {
+			report(cause);
+		}
+	}
+
+	function requestCloseSuspended(id: string) {
+		if (suspending.value || marking.value || closingWindow.value || removingSuspended.value || suspendedClose.value)
+			return;
+		suspendedClose.value = suspended.value.find((session) => session.id === id);
+	}
+
+	async function confirmCloseSuspended() {
+		const target = suspendedClose.value;
+		if (!target || removingSuspended.value) return;
+		removingSuspended.value = true;
+		try {
+			await request('sessions/' + target.id + '/suspended', 'DELETE');
+			suspendedClose.value = undefined;
+		} catch (cause) {
+			report(cause);
 		} finally {
-			suspending.value = false;
+			removingSuspended.value = false;
+		}
+	}
+
+	function cancelCloseSuspended() {
+		if (!removingSuspended.value) suspendedClose.value = undefined;
+	}
+
+	async function toggleSuspend(id: string) {
+		const tab = tabs.value.find((item) => item.id === id);
+		if (
+			!tab ||
+			tab.state !== 'attached' ||
+			tab.terminal === 'closed' ||
+			marking.value ||
+			suspending.value ||
+			closingWindow.value ||
+			confirmOpen.value ||
+			suspendedClose.value
+		)
+			return;
+		marking.value = id;
+		try {
+			await request('sessions/' + id + '/mark', 'PATCH', { marked: !tab.markedForSuspend }, SessionSchema);
+			signal.throwIfAborted();
+		} catch (cause) {
+			report(cause);
+		} finally {
+			marking.value = undefined;
 		}
 	}
 
@@ -285,6 +356,13 @@ export function useWorkspaceSessions(props: {
 		selected,
 		connecting,
 		suspending,
+		marking,
+		closingWindow,
+		suspendedClose,
+		removingSuspended,
+		requestCloseSuspended,
+		confirmCloseSuspended,
+		cancelCloseSuspended,
 		host,
 		busySessions,
 		confirmOpen,
@@ -294,6 +372,6 @@ export function useWorkspaceSessions(props: {
 		add,
 		connect,
 		close,
-		suspend,
+		toggleSuspend,
 	};
 }

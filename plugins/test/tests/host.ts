@@ -16,8 +16,7 @@ import provider from './fixtures/provider/package.json' with { type: 'json' };
 
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
-const defaultImage =
-	'ghcr.io/0honus0/nexus-terminal@sha256:d169a2852d75ea4ee184f5787163be365de95dafd6b2b1e2ae36bc79e104a440';
+const defaultImage = (await readFile(new URL('../../../scripts/ci/host-image.txt', import.meta.url), 'utf8')).trim();
 
 export const market = '/api/plugins/' + encodeURIComponent('@nexus-terminal/marketplace');
 

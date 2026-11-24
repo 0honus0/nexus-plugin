@@ -1,74 +1,84 @@
 <script setup lang="ts">
-	import { computed, ref } from 'vue';
-	import { Link } from '@lucide/vue';
-	import manifest, { inlineIcons } from 'virtual:workspace-file-icons';
-	const props = defineProps<{ name: string; kind: string }>();
-	const loaded = ref('');
-	const fallback = computed(() => iconFile(props.kind === 'directory' ? manifest.folder : manifest.file));
-	const file = computed(() => {
-		const name = props.name.toLowerCase();
-		const suffixes = name.split('.').map((_, index, parts) => parts.slice(index).join('.'));
-		const id =
-			props.kind === 'directory'
-				? (manifest.folderNames?.[name] ?? manifest.folder)
-				: (manifest.fileNames?.[name] ??
-					suffixes.map((ext) => manifest.fileExtensions?.[ext]).find(Boolean) ??
-					manifest.file);
-		return iconFile(id);
-	});
-	const embedded = computed(() => inlineIcons[file.value]);
-	const external = computed(() => new URL('assets/file-icons/' + file.value, import.meta.url).href);
-
-	function iconFile(id?: string): string {
-		return (id && manifest.iconDefinitions?.[id]?.iconPath.split('/').pop()) || 'file.svg';
-	}
-
-	function showIcon(event: Event): void {
-		loaded.value = (event.currentTarget as HTMLImageElement).src;
-	}
+	import { computed } from 'vue';
+	import {
+		File,
+		Folder,
+		Link,
+		FileImage,
+		FileVideo,
+		FileAudio,
+		FileText,
+		FileSpreadsheet,
+		Presentation,
+		FileArchive,
+		FileCode,
+		Settings,
+		BookOpen,
+		Database,
+		KeyRound,
+		Terminal,
+		FileType,
+		Shield,
+		GitBranch,
+		Package,
+		Container,
+		Scale,
+		Disc3,
+		CornerUpLeft,
+	} from '@lucide/vue';
+	import type { FileEntry } from '../../shared/workspace-file-types';
+	import { fileIconKind } from './file-icon-kind';
+	const props = defineProps<{ name: string; kind: FileEntry['kind'] }>();
+	const icons = {
+		file: File,
+		folder: Folder,
+		parent: CornerUpLeft,
+		link: Link,
+		image: FileImage,
+		video: FileVideo,
+		audio: FileAudio,
+		document: FileText,
+		spreadsheet: FileSpreadsheet,
+		presentation: Presentation,
+		archive: FileArchive,
+		disk: Disc3,
+		code: FileCode,
+		config: Settings,
+		book: BookOpen,
+		database: Database,
+		key: KeyRound,
+		terminal: Terminal,
+		font: FileType,
+		git: GitBranch,
+		package: Package,
+		container: Container,
+		shield: Shield,
+		license: Scale,
+	};
+	const type = computed(() => fileIconKind(props.name, props.kind));
 </script>
 <template>
-	<span class="workspace-file-icon">
-		<img v-if="embedded || loaded !== external" :src="embedded ?? inlineIcons[fallback]" alt="" />
-		<img
-			v-if="!embedded"
-			:src="external"
-			alt=""
-			loading="lazy"
-			decoding="async"
-			class="workspace-file-icon-detail"
-			:class="{ 'is-loaded': loaded === external }"
-			@load="showIcon"
-		/>
-		<Link v-if="kind === 'link'" :size="9" />
-	</span>
+	<span class="workspace-file-icon" :data-file-icon="type" aria-hidden="true"
+		><component :is="icons[type]" :size="16"
+	/></span>
 </template>
 <style scoped>
 	.workspace-file-icon {
-		position: relative;
 		display: inline-flex;
-		width: 20px;
-		height: 20px;
+		width: 18px;
+		height: 18px;
 		flex: none;
-	}
-	img {
-		width: 100%;
-		height: 100%;
-	}
-	.workspace-file-icon-detail {
-		position: absolute;
-		inset: 0;
-		visibility: hidden;
-	}
-	.workspace-file-icon-detail.is-loaded {
-		visibility: visible;
-	}
-	svg {
-		position: absolute;
-		right: -3px;
-		bottom: -3px;
+		align-items: center;
+		justify-content: center;
 		color: var(--ui-muted);
-		background: var(--ui-surface);
-		border-radius: 3px;
+	}
+	.workspace-file-icon[data-file-icon='folder'] {
+		color: color-mix(in srgb, var(--ui-primary) 58%, var(--ui-muted));
+	}
+	.workspace-file-icon[data-file-icon='link'] {
+		color: var(--ui-warning, var(--ui-muted));
+	}
+	.is-selected .workspace-file-icon {
+		color: var(--ui-primary);
 	}
 </style>

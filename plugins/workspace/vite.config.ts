@@ -1,9 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
-import { fileIcons } from './scripts/file-icons.js';
 
-export default defineConfig(({ isSsrBuild }) => ({
-	plugins: isSsrBuild ? [] : [fileIcons()],
+export default defineConfig({
 	resolve: {
 		alias: Object.fromEntries(
 			['remote-file-types', 'remote-tools-types', 'remote-transfer-types'].map((name) => [
@@ -12,4 +10,4 @@ export default defineConfig(({ isSsrBuild }) => ({
 			]),
 		),
 	},
-}));
+});

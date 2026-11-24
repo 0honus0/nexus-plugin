@@ -129,8 +129,9 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	const list = files.locator('.workspace-file-list');
 	const folder = files.getByRole('button', { name: 'prefetch-fixture', exact: true });
 	const prefetchedFile = files.getByRole('button', { name: 'prefetched.txt', exact: true });
-	await expect(entry.locator('img')).toHaveAttribute('src', /^data:image\/svg\+xml,/u);
-	await expect(folder.locator('img')).toHaveAttribute('src', /^data:image\/svg\+xml,/u);
+	await expect(entry.locator('[data-file-icon="document"] svg')).toBeVisible();
+	await expect(folder.locator('[data-file-icon="folder"] svg')).toBeVisible();
+	await expect(files.locator('.workspace-file-icon img')).toHaveCount(0);
 	const releaseDirectory = Promise.withResolvers<void>();
 
 	const history = async () => WorkspacePathHistorySchema.parse(await host.json(base + '/path-history')).paths;

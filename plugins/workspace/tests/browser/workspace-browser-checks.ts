@@ -397,6 +397,13 @@ export async function verifyWorkspaceSessionPresentation(
 	await expect(terminalRows).toHaveCSS('font-size', `${fontSize + 1}px`);
 	const markPath = base + '/sessions/' + session.id + '/mark';
 
+	// Mutations made outside the window must still arrive via the shared topic
+	// after the desktop tile has been remounted by the viewport changes above.
+	await host.json(markPath, { marked: true }, 'PATCH');
+	await expect(first).toHaveAttribute('aria-description', 'Marked for suspend');
+	await host.json(markPath, { marked: false }, 'PATCH');
+	await expect(first).toHaveAttribute('aria-description', 'Connected');
+
 	async function setMark(marked: boolean, tab: Locator) {
 		await tab.click({ button: 'right' });
 		const response = page.waitForResponse(
@@ -416,11 +423,17 @@ export async function verifyWorkspaceSessionPresentation(
 
 	await setMark(true, first);
 	await expect(active.locator('.xterm')).toBeVisible();
+	const release = page.waitForResponse(
+		(value) =>
+			new URL(value.url()).pathname === base + '/sessions/' + session.id + '/release' &&
+			value.request().method() === 'POST',
+	);
 	await workspace.getByRole('button', { name: 'Close tab Workspace test SSH · 1', exact: true }).click();
+	const released = await release;
+	expect(released.status(), await released.text()).toBe(204);
 	await expect(first).toHaveCount(0);
 	await workspace.getByRole('button', { name: 'New session', exact: true }).click();
 	const resume = workspace.getByRole('button', { name: 'Resume · Workspace test SSH', exact: true });
-	await expect(resume).toBeVisible();
 	const suspended = SessionListResponseSchema.parse(await host.json(base + '/sessions')).items.find(
 		(item) => item.id === session.id,
 	);
@@ -428,6 +441,7 @@ export async function verifyWorkspaceSessionPresentation(
 		state: 'suspended',
 		presentation: { [profile!]: { scales: { files: 1.1, terminal: fontSize + 1 } } },
 	});
+	await expect(resume).toBeVisible();
 	await resume.click();
 	await expect.poll(width, { message: JSON.stringify(suspended?.presentation) }).toBeCloseTo(suspendedWidth, 0);
 	await expect(files).toHaveCSS('transform', 'matrix(1.1, 0, 0, 1.1, 0, 0)');

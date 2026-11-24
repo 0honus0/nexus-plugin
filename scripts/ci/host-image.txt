@@ -1,1 +1,1 @@
-ghcr.io/0honus0/nexus-terminal:sha-63bb9667660f1a653341a7fedd3e369169e35c95
+ghcr.io/0honus0/nexus-terminal:sha-ae62b746fb24f12046bf926e9635c2d3898883bd

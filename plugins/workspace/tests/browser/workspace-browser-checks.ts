@@ -719,7 +719,19 @@ export async function verifyFileMutations(page: Page, workspace: Locator, direct
 	}
 	await expect(list).toHaveAttribute('aria-busy', 'false');
 	await entry('renamed.txt').press('Delete');
+	await expect(deletion).toBeVisible();
+	// A modal temporarily hides the background from accessibility queries. Wait
+	// for the actual removal response before interpreting a missing row as success.
+	const fileRemoved = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname.endsWith('/files/remove') && response.request().method() === 'POST',
+	);
 	await deletion.getByRole('contentinfo').getByRole('button', { name: 'Delete', exact: true }).click();
+	const fileResult = await fileRemoved;
+	expect(fileResult.request().postDataJSON()).toEqual({ paths: ['/qa-folder/renamed.txt'] });
+	expect(fileResult.status(), await fileResult.text()).toBe(204);
+	await expect(deletion).toHaveCount(0);
+	await expect(entry('Parent directory')).toBeVisible();
 	await expect(entry('renamed.txt')).toHaveCount(0);
 	await expect(stat(join(directory, 'qa-folder', 'renamed.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
 

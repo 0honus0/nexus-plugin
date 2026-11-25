@@ -111,9 +111,13 @@
 				</UiCard>
 			</div>
 		</section>
-		<div class="workspace-home-groups" :aria-busy="!connectionsLoaded && !connectionsReadFailed">
+		<div
+			class="workspace-home-groups"
+			:aria-busy="connectionsAvailable && !connectionsLoaded && !connectionsReadFailed"
+		>
 			<div v-if="!connectionsLoaded" class="workspace-home-empty">
-				<template v-if="connectionsReadFailed">
+				<p v-if="!connectionsAvailable" role="status">{{ t('connectionsUnavailable') }}</p>
+				<template v-else-if="connectionsReadFailed">
 					<p>{{ t('connectionsReadFailed') }}</p>
 					<UiButton @click="emit('retry')">{{ t('retryConnections') }}</UiButton>
 				</template>

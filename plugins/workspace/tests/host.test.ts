@@ -410,6 +410,14 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 	await setEnabled(host, '@nexus-terminal/connections', false);
 	await browserExpect(workspace).toBeVisible();
 	await browserExpect(workspace.locator('.xterm')).toHaveCount(0);
+	await browserExpect(
+		workspace.getByText('Connection service is not ready. Check dependencies in the marketplace.', {
+			exact: true,
+		}),
+	).toBeVisible();
+	await browserExpect(workspace.getByText('Loading connections…', { exact: true })).toHaveCount(0);
+	await setEnabled(host, '@nexus-terminal/connections', true);
+	await browserExpect(workspace.getByRole('button', { name: 'Workspace test SSH', exact: true })).toBeVisible();
 	await setEnabled(host, id, false);
 	await until(async () => peers.size === 0 || undefined);
 	await browserExpect(workspace).toHaveCount(0);

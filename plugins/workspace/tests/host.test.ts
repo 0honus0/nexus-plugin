@@ -335,6 +335,7 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 		(item) => item.id === sourceId,
 	);
 	expect(source).toMatchObject({ connectionId: connection.id, state: 'attached', terminal: 'running' });
+	const transferErrorStart = browserErrors.length;
 	await verifyWorkspaceTransfers(page, workspace, {
 		sourceId,
 		destinationId: destinationSession.result.session.id,
@@ -342,6 +343,11 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 		readStarted: readStarted.promise,
 		releaseRead: releaseRead.resolve,
 	});
+	// The intentionally aborted upload must report exactly one expected error.
+	expect(browserErrors.slice(transferErrorStart)).toEqual([
+		expect.stringMatching(/source: @nexus-terminal\/workspace, code: WORKSPACE_OPERATION_FAILED\}/u),
+	]);
+	browserErrors.splice(transferErrorStart, 1);
 
 	const created = SessionCreateResultSchema.parse(
 		await host.json(base + '/sessions', {

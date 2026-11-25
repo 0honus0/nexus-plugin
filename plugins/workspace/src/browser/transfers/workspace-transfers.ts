@@ -64,7 +64,7 @@ export function createWorkspaceTransfers(ctx: PluginContextApi, view: PluginWind
 				}
 				let directoryChanged = false;
 				for (const task of tasks.value)
-					if (isTransferFinished(task.state) && !completedIds.has(task.id)) {
+					if (backendIds.has(task.id) && isTransferFinished(task.state) && !completedIds.has(task.id)) {
 						completedIds.add(task.id);
 						if (task.state === 'completed') {
 							retryFiles.delete(task.id);
@@ -246,15 +246,23 @@ export function createWorkspaceTransfers(ctx: PluginContextApi, view: PluginWind
 
 		async clear() {
 			try {
-				const groups = new Set(history.value.map((task) => task.id));
+				const groups = new Set(history.value.map((task) => task.batchId ?? task.id));
+				const local = new Set(
+					tasks.value
+						.filter((task) => !backendIds.has(task.id) && groups.has(task.batchId ?? task.id))
+						.map((task) => task.id),
+				);
 				await client.request('transfers/history', 'DELETE');
-				for (const task of tasks.value)
-					if (groups.has(task.batchId ?? task.id)) {
-						retryFiles.delete(task.id);
-						completedIds.delete(task.id);
-						backendIds.delete(task.id);
-					}
-				tasks.value = tasks.value.filter((task) => !groups.has(task.batchId ?? task.id));
+				// Server-owned history is removed by its delta/snapshot. Only discard
+				// the captured local records, never a newly started or adopted task.
+				const live = new Set(active.value.map((task) => task.batchId ?? task.id));
+				tasks.value = tasks.value.filter((task) => {
+					if (!local.has(task.id) || backendIds.has(task.id) || live.has(task.batchId ?? task.id))
+						return true;
+					retryFiles.delete(task.id);
+					completedIds.delete(task.id);
+					return false;
+				});
 			} catch (cause) {
 				client.report(cause);
 			}

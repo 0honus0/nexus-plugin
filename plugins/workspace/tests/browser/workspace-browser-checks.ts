@@ -1037,4 +1037,36 @@ export async function verifyWorkspaceTransfers(
 	).toBeVisible();
 	await expect(readFile(join(fixture.directory, 'blocked.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
 	await center.getByRole('button', { name: 'Collapse', exact: true }).click();
+
+	// A client-side failure has no server record to remove via the state socket.
+	const uploadRoute = '**/file?*';
+	await page.route(uploadRoute, async (route) => {
+		if (
+			route.request().method() === 'PUT' &&
+			new URL(route.request().url()).searchParams.get('path')?.endsWith('/qa-local-failure.txt')
+		)
+			await route.abort();
+		else await route.continue();
+	});
+	try {
+		await workspace
+			.locator('.workspace-tab-panel[data-state="active"] .workspace-files input[type=file]')
+			.setInputFiles({
+				name: 'qa-local-failure.txt',
+				mimeType: 'text/plain',
+				buffer: Buffer.from('disposable fixture'),
+			});
+		await workspace.getByRole('button', { name: 'Transfers', exact: true }).click();
+		await center.getByRole('tab', { name: 'History', exact: true }).click();
+		await expect(
+			center.locator('.workspace-transfer-task[data-state="failed"]').filter({ hasText: 'qa-local-failure.txt' }),
+		).toBeVisible();
+	} finally {
+		await page.unroute(uploadRoute);
+	}
+	await center.getByRole('button', { name: 'Clear history', exact: true }).click();
+	await expect(center.getByText('No transfer history', { exact: true })).toBeVisible();
+	await expect(center.locator('.workspace-transfer-task')).toHaveCount(0);
+	await expect(center.getByRole('button', { name: 'Clear history', exact: true })).toBeDisabled();
+	await center.getByRole('button', { name: 'Collapse', exact: true }).click();
 }

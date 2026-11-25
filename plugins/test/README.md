@@ -18,6 +18,10 @@ pnpm test:sdk
 
 测试启动临时 Docker 宿主和 HTTP 插件仓库，通过市场安装测试插件及其依赖。认证夹具只有在测试宿主收到一次性随机凭证时才登记登录方式。结束时删除临时容器和数据卷。
 
+## 远程 Windows Chrome 下载验证
+
+`NEXUS_TEST_CDP` 和 `NEXUS_TEST_CDP_BIND` 用于连接外部浏览器及隔离测试宿主 relay。Workspace 原生 OpenSSH 用例可额外设置 `NEXUS_TEST_CDP_DOWNLOAD_DIR` 为 Windows 浏览器主机上每次运行独立、可写的绝对目录（例如 `C:/Users/Public/Downloads/Nexus-QA-unique-run`），显式启用实际落盘、SHA-256 和完成历史断言。仅设置当前临时浏览器 context 的下载行为，不覆盖已有默认 context。不能把 Linux runner 临时目录作为 Windows 浏览器下载目录；未提供该变量时 CDP 测试不声称验证本地磁盘内容。Windows 测试目录需要在浏览器主机上清理，Linux runner 不会删除远端文件。
+
 ## 覆盖
 
 | 入口                        | 用例                                                                                                                                                           |

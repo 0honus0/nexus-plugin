@@ -2,9 +2,10 @@ import { execFile } from 'node:child_process';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 import { promisify } from 'node:util';
-import { expect as browserExpect } from '@playwright/test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { expect as browserExpect, type Download } from '@playwright/test';
 import ssh2 from 'ssh2';
 import { expect, it } from 'vitest';
 import { z } from 'zod';
@@ -111,6 +112,86 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 			locale: 'en-US',
 			reducedMotion: 'reduce',
 		});
+		// A remote Windows Chrome cannot save to the Linux Playwright artifact directory.
+		// Only an explicitly supplied, disposable Windows directory enables remote disk assertions.
+		const remoteDownloadDir = process.env.NEXUS_TEST_CDP_DOWNLOAD_DIR;
+		if (remoteDownloadDir) {
+			if (!process.env.NEXUS_TEST_CDP || !/^[a-z]:[\\/]/iu.test(remoteDownloadDir))
+				throw new Error('CDP download assertions require a dedicated absolute Windows directory');
+			const context = page.context();
+			const browserSession = await context.browser()!.newBrowserCDPSession();
+			// Keep the browser session alive: detaching drops its download behavior.
+			resources.defer(() => browserSession.detach());
+			const pageSession = await context.newCDPSession(page);
+			try {
+				const { targetInfo } = await pageSession.send('Target.getTargetInfo');
+				const { browserContextIds } = await browserSession.send('Target.getBrowserContexts');
+				if (!targetInfo.browserContextId || !browserContextIds.includes(targetInfo.browserContextId))
+					throw new Error('Downloads must be configured only on a disposable browser context');
+				await browserSession.send('Browser.setDownloadBehavior', {
+					behavior: 'allow',
+					browserContextId: targetInfo.browserContextId,
+					downloadPath: remoteDownloadDir,
+					eventsEnabled: true,
+				});
+			} finally {
+				await pageSession.detach();
+			}
+		}
+
+		async function confirmRemoteSave(download: Download) {
+			const deadline = new AbortController();
+			try {
+				expect(
+					await Promise.race([
+						download.failure(),
+						delay(30000, undefined, { signal: deadline.signal }).then(() => {
+							throw new Error('Timed out waiting for remote browser download completion');
+						}),
+					]),
+				).toBeNull();
+			} finally {
+				deadline.abort();
+			}
+		}
+
+		async function remoteFileDigest(name: string) {
+			if (!remoteDownloadDir) throw new Error('No remote download directory');
+			const context = page.context();
+			const verifier = await context.newPage();
+			try {
+				await verifier.goto(origin);
+				await verifier.setContent('<input type="file" id="fixture-download">');
+				const session = await context.newCDPSession(verifier);
+				try {
+					const { root } = await session.send('DOM.getDocument');
+					const { nodeId } = await session.send('DOM.querySelector', {
+						nodeId: root.nodeId,
+						selector: '#fixture-download',
+					});
+					await session.send('DOM.setFileInputFiles', {
+						nodeId,
+						files: [win32.join(remoteDownloadDir, name)],
+					});
+					return await verifier.locator('input').evaluate(async (input: HTMLInputElement) => {
+						const file = input.files?.[0];
+						if (!file) throw new Error('Saved file is missing');
+						const hash = Array.from(
+							new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())),
+							(byte) => byte.toString(16).padStart(2, '0'),
+						).join('');
+						return { size: file.size, hash };
+					});
+				} finally {
+					await session.detach();
+				}
+			} finally {
+				await verifier.close();
+			}
+		}
+
+		const checkNativeSave = !process.env.NEXUS_TEST_CDP || !!remoteDownloadDir;
+
 		page.setDefaultTimeout(10000);
 		const errors = collectBrowserErrors(page);
 		await page.goto(origin);
@@ -236,7 +317,13 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 		await page.getByRole('menuitem', { name: 'Download file', exact: true }).click();
 		const download = await downloadEvent;
 		expect(download.suggestedFilename()).toBe('source.txt');
-		if (!process.env.NEXUS_TEST_CDP) {
+		if (remoteDownloadDir) {
+			await confirmRemoteSave(download);
+			expect(await remoteFileDigest('source.txt')).toEqual({
+				size: Buffer.byteLength('native archive bytes'),
+				hash: createHash('sha256').update('native archive bytes').digest('hex'),
+			});
+		} else if (!process.env.NEXUS_TEST_CDP) {
 			const local = await mkdtemp(join(tmpdir(), 'nexus-archive-download-'));
 			try {
 				const destination = join(local, 'source.txt');
@@ -274,29 +361,34 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 			return { status: response.status, size: bytes.byteLength, hash };
 		}, largeUrl.toString());
 		expect(received).toEqual({ status: 200, size: largeSize, hash: largeHash });
-		if (!process.env.NEXUS_TEST_CDP) {
+		if (checkNativeSave) {
 			await file(largeName).click({ button: 'right' });
 			const event = page.waitForEvent('download');
 			await page.getByRole('menuitem', { name: 'Download file', exact: true }).click();
 			const artifact = await event;
 			expect(artifact.suggestedFilename()).toBe(largeName);
-			const local = await mkdtemp(join(tmpdir(), 'nexus-large-download-'));
-			try {
-				const destination = join(local, largeName);
-				await artifact.saveAs(destination);
-				const bytes = await readFile(destination);
-				expect(bytes.length).toBe(largeSize);
-				expect(createHash('sha256').update(bytes).digest('hex')).toBe(largeHash);
-			} finally {
-				await rm(local, { recursive: true, force: true });
+			if (remoteDownloadDir) {
+				await confirmRemoteSave(artifact);
+				expect(await remoteFileDigest(largeName)).toEqual({ size: largeSize, hash: largeHash });
+			} else {
+				const local = await mkdtemp(join(tmpdir(), 'nexus-large-download-'));
+				try {
+					const destination = join(local, largeName);
+					await artifact.saveAs(destination);
+					const bytes = await readFile(destination);
+					expect(bytes.length).toBe(largeSize);
+					expect(createHash('sha256').update(bytes).digest('hex')).toBe(largeHash);
+				} finally {
+					await rm(local, { recursive: true, force: true });
+				}
 			}
 		}
 		await workspace.getByRole('button', { name: 'Transfers', exact: true }).click();
 		await center.getByRole('tab', { name: 'History', exact: true }).click();
 		const largeHistory = center.locator('.workspace-transfer-task').filter({ hasText: largeName });
-		await browserExpect(largeHistory).toHaveCount(process.env.NEXUS_TEST_CDP ? 1 : 2);
+		await browserExpect(largeHistory).toHaveCount(checkNativeSave ? 2 : 1);
 		await browserExpect(largeHistory.and(center.locator('[data-state="completed"]'))).toHaveCount(
-			process.env.NEXUS_TEST_CDP ? 1 : 2,
+			checkNativeSave ? 2 : 1,
 		);
 		await center.getByRole('button', { name: 'Collapse', exact: true }).click();
 

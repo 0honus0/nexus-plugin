@@ -114,7 +114,7 @@ export async function startBrowser(
 		for (const socket of sockets) socket.destroy();
 		await new Promise<void>((resolve) => server.close(() => resolve()));
 	});
-	const browser = await chromium.connectOverCDP(cdp);
+	const browser = await chromium.connectOverCDP(cdp, { noDefaults: true });
 	resources.defer(() => browser.close());
 	const context = await browser.newContext({ ...options, ignoreHTTPSErrors: true });
 	resources.defer(() => context.close());

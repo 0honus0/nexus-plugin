@@ -109,7 +109,7 @@
 	);
 	const names = new Intl.Collator(undefined, { numeric: true });
 	const rows = computed(() =>
-		(browserSearch.active.value && browserSearch.entries.value ? browserSearch.entries.value : files.entries.value)
+		(browserSearch.active.value ? (browserSearch.entries.value ?? []) : files.entries.value)
 			.filter(
 				(entry) =>
 					showHidden.value ||
@@ -586,7 +586,12 @@
 						}}</span>
 					</button>
 					<UiEmptyState
-						v-if="loaded && !rows.length && !searching"
+						v-if="
+							loaded &&
+							!rows.length &&
+							!searching &&
+							(!browserSearch.active.value || browserSearch.entries.value !== undefined)
+						"
 						:title="t(browserSearch.active.value ? 'noFilesMatch' : 'emptyDirectory')"
 						:icon="Folder"
 					/>

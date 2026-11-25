@@ -22,7 +22,7 @@ export function useFileSearch(ctx: PluginContextApi, sessionId: string, path: Re
 		timer.stop();
 		invalidate();
 		const text = query.value.trim();
-		if (!text || signal.aborted) return;
+		if (!text || signal.aborted || ctx.signal.aborted) return;
 		const current = revision;
 		controller = new AbortController();
 		const requestSignal = AbortSignal.any([signal, ctx.signal, controller.signal]);
@@ -58,10 +58,12 @@ export function useFileSearch(ctx: PluginContextApi, sessionId: string, path: Re
 		() => {
 			invalidate();
 			timer.stop();
-			if (query.value.trim()) timer.start();
-			if (!query.value.trim()) {
-				entries.value = undefined;
-				truncated.value = false;
+			// Results belong to the previous query, not the text being edited.
+			entries.value = undefined;
+			truncated.value = false;
+			if (query.value.trim() && !signal.aborted && !ctx.signal.aborted) {
+				searching.value = true;
+				timer.start();
 			}
 		},
 		{ flush: 'sync' },

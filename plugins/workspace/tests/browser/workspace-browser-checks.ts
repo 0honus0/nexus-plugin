@@ -794,6 +794,35 @@ export async function verifyFileMutations(page: Page, workspace: Locator, direct
 	const entry = (name: string) => files.getByRole('button', { name, exact: true });
 
 	const list = files.locator('.workspace-file-list');
+	await expect(entry('file.txt')).toBeVisible();
+	await files.getByRole('button', { name: 'Search this folder and subfolders', exact: true }).click();
+	const query = files.getByRole('textbox', { name: 'Search this folder and subfolders', exact: true });
+	await query.fill('file.txt');
+	await expect(entry('file.txt')).toBeVisible();
+	await expect(list).toHaveAttribute('aria-busy', 'false');
+	const searchStarted = Promise.withResolvers<void>();
+	const releaseSearch = Promise.withResolvers<void>();
+	const searchRequests = '**/files/search?*';
+	await page.route(searchRequests, async (route) => {
+		if (new URL(route.request().url()).searchParams.get('query') === 'qa-no-matching-file') {
+			searchStarted.resolve();
+			await releaseSearch.promise;
+		}
+		await route.continue();
+	});
+	try {
+		await query.fill('qa-no-matching-file');
+		await searchStarted.promise;
+		await expect(list).toHaveAttribute('aria-busy', 'true');
+		await expect(list.locator('.workspace-file-row')).toHaveCount(0);
+		await expect(list.getByText('No matching files', { exact: true })).toHaveCount(0);
+	} finally {
+		releaseSearch.resolve();
+		await page.unroute(searchRequests);
+	}
+	await expect(list.getByText('No matching files', { exact: true })).toBeVisible();
+	await files.getByRole('button', { name: 'Close search', exact: true }).click();
+	await expect(entry('file.txt')).toBeVisible();
 	await list.focus();
 	await list.press('Control+Shift+n');
 	const folder = page.getByRole('dialog', { name: 'New directory', exact: true });

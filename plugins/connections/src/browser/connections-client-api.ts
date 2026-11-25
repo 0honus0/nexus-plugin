@@ -117,7 +117,6 @@ export class ConnectionsClient implements ConnectionsClientApi {
 		const signal = AbortSignal.any([this.#context.signal, AbortSignal.timeout(5_000)]);
 		signal.throwIfAborted();
 		if (!this.#subscribed) {
-			this.#subscribed = true;
 			this.#context.app.state.subscribe('connections', ConnectionsRevisionSchema, {
 				updated: ({ revision }) => {
 					this.#revision = revision;
@@ -131,6 +130,7 @@ export class ConnectionsClient implements ConnectionsClientApi {
 					this.#snapshotRevision = undefined;
 				},
 			});
+			this.#subscribed = true;
 		}
 		this.#requests.value++;
 		try {

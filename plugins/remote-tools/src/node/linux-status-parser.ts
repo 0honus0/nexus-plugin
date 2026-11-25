@@ -93,7 +93,7 @@ export class LinuxStatusParser {
 				status.netTxRate = seconds > 0 ? Math.max(0, Math.round((current.tx - previous.tx) / seconds)) : 0;
 			}
 			this.previousNet = { ...current, timestamp, name: netInterface! };
-		}
+		} else this.previousNet = undefined;
 		return ServerStatusSchema.parse(status);
 	}
 

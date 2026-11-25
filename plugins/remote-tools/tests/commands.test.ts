@@ -4,6 +4,7 @@ import { parse } from 'shell-quote';
 import type { ClientChannel } from 'ssh2';
 import type { SshConnectionApi } from '@nexus-terminal/ssh/ssh-api';
 import { RemoteTools } from '../src/node/remote-tools-api.js';
+import { statusSample } from './status-sample.js';
 import { testScope } from './fixtures/scope.js';
 afterEach(() => vi.useRealTimers());
 
@@ -144,4 +145,32 @@ it('reads the exit status from close when exit has already occurred', async () =
 	stream.emit('close', 0);
 	expect(await operation).toMatchObject({ code: 0 });
 	await f.provider.stop();
+});
+
+it('does not seed rate calculations with a status response from before reset', async () => {
+	const streams = [channel(), channel(), channel()];
+	const exec = vi.fn(async () => streams[exec.mock.calls.length - 1]!);
+	const f = fixture(exec);
+	try {
+		const first = f.session.getStatus();
+		await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(1));
+		f.session.resetStatus();
+		streams[0]!.emit('data', Buffer.from(statusSample(0)));
+		streams[0]!.emit('close', 0);
+		expect((await first).cpuPercent).toBeUndefined();
+		const second = f.session.getStatus();
+		await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(2));
+		streams[1]!.emit('data', Buffer.from(statusSample(1)));
+		streams[1]!.emit('close', 0);
+		const next = await second;
+		expect(next.cpuPercent).toBeUndefined();
+		expect(next.netRxRate).toBeUndefined();
+		const third = f.session.getStatus();
+		await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(3));
+		streams[2]!.emit('data', Buffer.from(statusSample(2)));
+		streams[2]!.emit('close', 0);
+		expect((await third).cpuPercent).toBe(40);
+	} finally {
+		await f.owner.stop();
+	}
 });

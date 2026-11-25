@@ -27,7 +27,7 @@ export class RemoteToolsSession implements RemoteToolsSessionApi {
 	readonly #controller = new AbortController();
 	readonly #commands: RemoteCommandExecutor;
 	readonly #transfer: RemoteTransfer;
-	readonly #parser = new LinuxStatusParser();
+	#parser = new LinuxStatusParser();
 	readonly #pending = new Set<Promise<unknown>>();
 	readonly #shells = new Set<RemoteShellApi>();
 	readonly #stopObserving: () => void;
@@ -119,11 +119,13 @@ export class RemoteToolsSession implements RemoteToolsSessionApi {
 		return this.#track(() => {
 			const signal = this.#signal(options?.signal);
 			const task = this.#statusQueue.then(async () => {
-				const result = await this.#commands.script(this.#parser.command(), signal);
+				const parser = this.#parser;
+				const result = await this.#commands.script(parser.command(), signal);
 				if (result.code === null) throw new RemoteToolsError('REMOTE_TOOLS_EXEC_OUTCOME_UNKNOWN');
 				if (result.code !== 0) throw new RemoteCommandError(result.code);
 				if (signal.aborted) throw new RemoteToolsError('REMOTE_TOOLS_EXEC_CANCELED');
-				return this.#parser.parse(result.stdout);
+				// A reset during collection must not seed the new sampling baseline.
+				return (parser === this.#parser ? parser : new LinuxStatusParser()).parse(result.stdout);
 			});
 			this.#statusQueue = task.catch(() => this.#parser.clear());
 			return task;
@@ -131,7 +133,7 @@ export class RemoteToolsSession implements RemoteToolsSessionApi {
 	}
 
 	resetStatus(): void {
-		this.#parser.clear();
+		this.#parser = new LinuxStatusParser();
 	}
 
 	close(): Promise<void> {

@@ -19,3 +19,14 @@ it('preserves byte units and computes CPU/network deltas only after a baseline',
 	expect(parser.parse(statusSample(3), 13000).cpuPercent).toBeUndefined();
 	expect(() => parser.parse('untrusted remote output')).toThrow('REMOTE_TOOLS_STATUS_UNAVAILABLE');
 });
+
+it('does not calculate network speed across a missing interface sample', () => {
+	const parser = new LinuxStatusParser();
+	parser.parse(statusSample(0), 1000);
+	const missing = statusSample(1).replace(/^eth0:.*$/m, '');
+	expect(parser.parse(missing, 2000).netRxRate).toBeUndefined();
+	const resumed = parser.parse(statusSample(2), 3000);
+	expect(resumed.netRxRate).toBeUndefined();
+	expect(resumed.netTxRate).toBeUndefined();
+	expect(parser.parse(statusSample(3), 4000).netRxRate).toBe(6000);
+});

@@ -57,3 +57,36 @@ test('合并目录请求并丢弃读取期间被新修订替代的结果', async
 	await Promise.resolve();
 	assert.equal(calls, 2);
 });
+
+test('retrying an initial failed subscription restores live updates', async () => {
+	let subscriptions = 0;
+	let reads = 0;
+	let publish!: (value: { revision: number }) => void;
+	const client = new ConnectionsClient({
+		signal: new AbortController().signal,
+
+		use() {},
+
+		app: {
+			state: {
+				subscribe(_name: string, _schema: unknown, observer: { updated: typeof publish }) {
+					if (++subscriptions === 1) throw new Error('fixture subscription failure');
+					publish = observer.updated;
+				},
+			},
+			http: {
+				async json() {
+					return { revision: ++reads, connections: [], tags: [] };
+				},
+			},
+			log: { report() {} },
+		},
+	} as unknown as PluginContextApi);
+	await assert.rejects(client.refresh(), /fixture subscription failure/u);
+	await client.refresh();
+	assert.equal(subscriptions, 2);
+	assert.equal(reads, 1);
+	publish({ revision: 2 });
+	await client.refresh();
+	assert.equal(reads, 2);
+});

@@ -52,12 +52,23 @@ export class CredentialsClient implements CredentialsClientApi {
 		signal?.throwIfAborted();
 		if (!this.#subscribed) {
 			this.#subscribed = true;
-			this.#context.app.state.subscribe('credentials', CredentialsRevisionSchema, {
-				updated: ({ revision }) => {
-					if (revision !== this.#revision)
-						void this.refresh().catch((cause) => this.report(cause, undefined, false));
-				},
-			});
+			try {
+				this.#context.app.state.subscribe('credentials', CredentialsRevisionSchema, {
+					updated: ({ revision }) => {
+						if (revision !== this.#revision)
+							void this.refresh().catch((cause) => this.report(cause, undefined, false));
+					},
+
+					unconfirmed: () => {
+						this.#revision = undefined;
+						// A late read from the previous topic instance cannot reconfirm its revision.
+						this.#applied = ++this.#request;
+					},
+				});
+			} catch (cause) {
+				this.#subscribed = false;
+				throw cause;
+			}
 		}
 		const request = ++this.#request;
 		this.#requests.value++;

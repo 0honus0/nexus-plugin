@@ -248,7 +248,7 @@ export async function startHost(
 		return stdout;
 	}
 
-	return { origin, fixtureToken, request, json, operation, logs };
+	return { origin, fixtureToken, request, json, operation, logs, container };
 }
 
 export async function setEnabled(

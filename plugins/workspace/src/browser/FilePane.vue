@@ -65,7 +65,7 @@
 		() => props.enabled,
 		() => props.connected,
 	);
-	const { path, loaded, loading, showRefreshLoading, mutating, busy } = files;
+	const { path, loaded, loading, directoryChanging, showRefreshLoading, mutating, busy } = files;
 	const catalog = useWorkspaceCatalog();
 	const operations = useFileOperations(
 		props.ctx,
@@ -93,7 +93,8 @@
 		const input = event.currentTarget as HTMLInputElement;
 		const chosen = Array.from(input.files ?? []);
 		input.value = '';
-		if (props.enabled && loaded.value && !busy.value && chosen.length) files.upload(chosen);
+		if (props.enabled && loaded.value && !directoryChanging.value && !busy.value && chosen.length)
+			files.upload(chosen);
 	}
 
 	function displayName(entry: FileEntry) {
@@ -253,6 +254,7 @@
 		if (
 			!props.enabled ||
 			!loaded.value ||
+			directoryChanging.value ||
 			busy.value ||
 			!entryItems(entry).some((item) => item.id === id && !item.disabled)
 		)
@@ -304,7 +306,8 @@
 	function shortcut(event: KeyboardEvent) {
 		if (
 			!props.enabled ||
-			loading.value ||
+			!loaded.value ||
+			directoryChanging.value ||
 			busy.value ||
 			operations.state.kind ||
 			operations.state.overwrite ||
@@ -396,7 +399,7 @@
 		checkValidity: (items) => !!items.length && Array.from(items).every((item) => item.kind === 'file'),
 
 		onDrop(dropped, event) {
-			if (!props.enabled || !loaded.value || busy.value) return;
+			if (!props.enabled || !loaded.value || directoryChanging.value || busy.value) return;
 			if (Array.from(event.dataTransfer?.items ?? []).some((item) => item.webkitGetAsEntry?.()?.isDirectory)) {
 				props.ctx.app.log.report({
 					level: 'warn',
@@ -425,7 +428,7 @@
 					icon-only
 					:aria-label="t('upload')"
 					:title="t('upload')"
-					:disabled="!enabled || !loaded || busy"
+					:disabled="!enabled || !loaded || directoryChanging || busy"
 					@click="uploadInput?.click()"
 					><Upload :size="16"
 				/></UiButton>
@@ -535,7 +538,7 @@
 		<div class="workspace-file-viewport">
 			<UiContextMenu
 				:items="entryItems(context)"
-				:disabled="!enabled || !loaded || mutating"
+				:disabled="!enabled || !loaded || directoryChanging || mutating"
 				@select="menuAction($event, context)"
 			>
 				<div

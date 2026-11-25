@@ -133,6 +133,11 @@ export function registerWorkspaceFilesHttp(
 				workspaceHttp(log, signal, async () => {
 					const { id, ...body } = input;
 					const session = service.sessionFiles(id);
+					if (!input.overwrite) {
+						const parent = await session.files.list(posix.dirname(input.destination), signal);
+						if (parent.entries.some((entry) => entry.name === posix.basename(input.destination)))
+							throw new WorkspaceError('WORKSPACE_FILE_EXISTS', 409);
+					}
 					const task = service.transfers.start(
 						{
 							kind: 'compress',

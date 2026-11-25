@@ -29,7 +29,8 @@ export function useFiles(
 		mutating = ref(false);
 	let revision = 0,
 		appliedRevision = -1;
-	let requestedPath = path.value;
+	const requestedPath = ref(path.value);
+	const directoryChanging = computed(() => loading.value && (!loaded.value || requestedPath.value !== path.value));
 	let prefetchTimer: ReturnType<typeof setTimeout> | undefined;
 	let prefetchTarget: string | undefined;
 	let rejectedPrefetchTarget: string | undefined;
@@ -105,14 +106,14 @@ export function useFiles(
 	async function navigate(remote: string, origin: 'navigation' | 'terminal' | 'background' = 'navigation') {
 		cancelPrefetch();
 		const current = ++revision;
-		requestedPath = remote;
+		requestedPath.value = remote;
 		const cached = directoryCache.get(remote);
 		loadingOrigin.value = origin;
 		loading.value = !cached;
 		try {
 			const value = cached ?? (await directoryCache.read(remote));
 			if (current !== revision || signal.aborted) return;
-			requestedPath = value.path;
+			requestedPath.value = value.path;
 			path.value = value.path;
 			entries.value = value.entries;
 			loaded.value = true;
@@ -120,7 +121,7 @@ export function useFiles(
 			return value.path;
 		} catch (cause) {
 			if (current !== revision || signal.aborted) return;
-			requestedPath = path.value;
+			requestedPath.value = path.value;
 			client.report(cause);
 		} finally {
 			if (current === revision) {
@@ -133,7 +134,7 @@ export function useFiles(
 	async function load(remote?: string) {
 		if (!enabled() || signal.aborted) return;
 		if (remote === undefined) invalidate();
-		return navigate(remote ?? requestedPath);
+		return navigate(remote ?? requestedPath.value);
 	}
 
 	/** CWD lookup must not supersede a newer directory navigation. */
@@ -174,7 +175,7 @@ export function useFiles(
 			if ((wasOnline && !online) || (previous !== undefined && current !== previous)) invalidate();
 			if (!active) cancelPrefetch();
 			if (active && online && !signal.aborted && appliedRevision !== current && !loading.value)
-				void navigate(requestedPath, 'background');
+				void navigate(requestedPath.value, 'background');
 		},
 		{ immediate: true, flush: 'sync' },
 	);
@@ -187,6 +188,7 @@ export function useFiles(
 		entries,
 		loaded,
 		loading,
+		directoryChanging,
 		showRefreshLoading,
 		mutating,
 		busy,

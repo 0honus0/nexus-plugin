@@ -130,6 +130,10 @@
 				v-slot="field"
 				><UiInput v-model="s.password" :id="field.id" type="password" autocomplete="off" :disabled="busy"
 			/></UiField>
+			<label v-if="s.kind === 'extract'" class="workspace-extract-overwrite">
+				<input v-model="s.replaceExisting" type="checkbox" :disabled="busy" />
+				<span>{{ t('filesMenu.extractOverwrite') }}</span>
+			</label>
 		</form>
 		<template #footer
 			><UiButton :disabled="busy" @click="operations.close()">{{ t('cancel') }}</UiButton
@@ -150,9 +154,9 @@
 		:show-close="!busy"
 		:close-on-escape="!busy"
 		:close-on-interact-outside="!busy"
-		@update:open="!$event && !busy && (s.overwrite = false)"
+		@update:open="!$event && operations.cancelOverwrite()"
 		><template #footer
-			><UiButton :disabled="busy" @click="s.overwrite = false">{{ t('cancel') }}</UiButton
+			><UiButton :disabled="busy" @click="operations.cancelOverwrite()">{{ t('cancel') }}</UiButton
 			><UiButton tone="danger" :loading="busy" @click="operations.confirmOverwrite()">{{
 				t('continue')
 			}}</UiButton></template
@@ -163,6 +167,14 @@
 	.workspace-file-dialog {
 		display: grid;
 		gap: 16px;
+	}
+	.workspace-extract-overwrite {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.workspace-extract-overwrite input {
+		accent-color: var(--ui-primary);
 	}
 	.workspace-permissions {
 		display: grid;

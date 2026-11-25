@@ -691,16 +691,33 @@ export async function verifyFileMutations(page: Page, workspace: Locator, direct
 	await page.getByRole('menuitem', { name: 'Permissions', exact: true }).click();
 	const permissions = page.getByRole('dialog', { name: 'Permissions', exact: true });
 	await permissions.getByRole('textbox', { name: 'Permissions (octal)', exact: true }).fill('600');
-	await permissions.getByRole('button', { name: 'Save', exact: true }).click();
-	await expect(permissions).toHaveCount(0);
-	expect((await stat(join(directory, 'qa-folder', 'renamed.txt'))).mode & 0o777).toBe(0o600);
-
-	await entry('renamed.txt').click();
-	await entry('renamed.txt').press('Delete');
+	const refreshStarted = Promise.withResolvers<void>();
+	const releaseRefresh = Promise.withResolvers<void>();
+	const directoryRequests = '**/directory?*';
+	await page.route(directoryRequests, async (route) => {
+		if (new URL(route.request().url()).searchParams.get('path') === '/qa-folder') {
+			refreshStarted.resolve();
+			await releaseRefresh.promise;
+		}
+		await route.continue();
+	});
 	const deletion = page.getByRole('dialog', { name: 'Delete', exact: true });
-	await expect(deletion).toBeVisible();
-	await deletion.getByRole('button', { name: 'Cancel', exact: true }).click();
-	await expect(entry('renamed.txt')).toBeVisible();
+	try {
+		await permissions.getByRole('button', { name: 'Save', exact: true }).click();
+		await expect(permissions).toHaveCount(0);
+		expect((await stat(join(directory, 'qa-folder', 'renamed.txt'))).mode & 0o777).toBe(0o600);
+		await refreshStarted.promise;
+		await expect(list).toHaveAttribute('aria-busy', 'true');
+		await entry('renamed.txt').click();
+		await entry('renamed.txt').press('Delete');
+		await expect(deletion).toBeVisible();
+		await deletion.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect(entry('renamed.txt')).toBeVisible();
+	} finally {
+		releaseRefresh.resolve();
+		await page.unroute(directoryRequests);
+	}
+	await expect(list).toHaveAttribute('aria-busy', 'false');
 	await entry('renamed.txt').press('Delete');
 	await deletion.getByRole('contentinfo').getByRole('button', { name: 'Delete', exact: true }).click();
 	await expect(entry('renamed.txt')).toHaveCount(0);

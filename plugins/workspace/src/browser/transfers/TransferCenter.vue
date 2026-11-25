@@ -1,5 +1,6 @@
 <script setup lang="ts">
 	import { groupTransferTasks } from './transfer-presentation';
+	import { fileErrors } from '../files/file-messages';
 	import { ref, computed } from 'vue';
 	import {
 		ArrowDownUp,
@@ -24,6 +25,10 @@
 	import { isTransferFinished, type TransferTask } from '../../shared/workspace-transfer-types';
 	const props = defineProps<{ transfers: WorkspaceTransfers; i18n: WorkspaceI18n; narrow: boolean }>();
 	const { t } = props.i18n;
+
+	const errorText = (code: string | number) =>
+		(fileErrors[props.i18n.language.value] as Record<string, string>)[String(code)] ?? String(code);
+
 	const section = ref('active'),
 		expanded = ref<string>(),
 		canceling = ref<TransferTask>(),
@@ -224,9 +229,12 @@
 									: task.currentFile
 							}}</span><span>{{ remaining(task) }}</span>
 						</div>
-						<p v-if="task.error" class="workspace-transfer-error">
-							{{ t('transferCenter.states.' + task.state) }} · {{ task.error.source }} /
-							{{ task.error.code }}
+						<p
+							v-if="task.error"
+							class="workspace-transfer-error"
+							:title="task.error.source + ' / ' + task.error.code"
+						>
+							{{ t('transferCenter.states.' + task.state) }} · {{ errorText(task.error.code) }}
 						</p>
 						<div v-if="expanded === task.id" class="workspace-transfer-details">
 							<dl>

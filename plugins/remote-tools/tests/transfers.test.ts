@@ -15,10 +15,12 @@ import { RemoteTransfer } from '../src/node/remote-transfer';
 import type { RemoteTransferTarget } from '../src/shared/remote-transfer-types';
 
 // Native integration needs an isolated root-owned OpenSSH daemon; unit tests remain portable.
-describe.skipIf(
-	process.getuid?.() !== 0 ||
-		!['/usr/sbin/sshd', '/usr/bin/ssh', '/usr/bin/rsync', '/usr/bin/scp', '/usr/bin/ssh-keygen'].every(existsSync),
-)('native OpenSSH transfers', () => {
+const nativeAvailable =
+	process.getuid?.() === 0 &&
+	['/usr/sbin/sshd', '/usr/bin/ssh', '/usr/bin/rsync', '/usr/bin/scp', '/usr/bin/ssh-keygen'].every(existsSync);
+if (process.env.NEXUS_TEST_NATIVE_REQUIRED === '1' && !nativeAvailable)
+	throw new Error('Required native transfer fixture is unavailable');
+describe.skipIf(!nativeAvailable)('native OpenSSH transfers', () => {
 	let root: string, daemon: ChildProcess, port: number, target: RemoteTransferTarget;
 	const lifetime = new AbortController();
 	const ssh = new Ssh(lifetime.signal, { report() {} });

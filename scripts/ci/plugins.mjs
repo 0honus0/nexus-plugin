@@ -111,6 +111,8 @@ function testPlugin(plugins, plugin) {
 		// Integration suites install candidate dependency archives using this map.
 		const env = { ...process.env, NEXUS_TEST_PLUGIN_ARTIFACTS: JSON.stringify(artifacts) };
 		runPnpm(plugin, ['test'], { env });
+		if (process.env.CI && ['remote-tools', 'workspace'].includes(plugin.name))
+			execFileSync('bash', [resolve('scripts/ci/native-transfer.sh'), plugin.name], { stdio: 'inherit', env });
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
 	}

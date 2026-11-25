@@ -51,6 +51,7 @@ export function useFileOperations(
 		format: 'zip',
 		password: '',
 		encrypted: false,
+		replaceExisting: false,
 		destination: '/',
 		server: '',
 		overwrite: false,
@@ -120,6 +121,7 @@ export function useFileOperations(
 			format,
 			password: '',
 			encrypted,
+			replaceExisting: false,
 			destination: directory,
 			server: '',
 			overwrite: false,
@@ -197,7 +199,7 @@ export function useFileOperations(
 							destination: value.destination,
 							format: value.format,
 							password: value.password || undefined,
-							overwrite,
+							overwrite: overwrite || value.replaceExisting,
 						});
 						break;
 					case 'send':
@@ -270,12 +272,20 @@ export function useFileOperations(
 		close() {
 			if (!files.mutating.value) {
 				state.kind = undefined;
+				state.password = '';
 				state.overwrite = false;
 				retry = undefined;
 			}
 		},
 
-		confirmOverwrite: () => retry && perform(retry, true),
+		cancelOverwrite() {
+			if (!files.mutating.value) {
+				state.overwrite = false;
+				retry = undefined;
+			}
+		},
+
+		confirmOverwrite: () => state.overwrite && retry && perform(retry, true),
 	};
 }
 

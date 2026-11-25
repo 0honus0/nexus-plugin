@@ -15,6 +15,7 @@ export const fileMessages = {
 		connect: '连接服务器',
 		browse: '浏览目录',
 		overwrite: '覆盖同名文件？',
+		extractOverwrite: '允许覆盖解压目标中的同名文件',
 		overwriteHint: '目标已有同名文件。确认后覆盖文件并合并目录，目录与文件之间不会互相替换。',
 		removeHint: '删除选中的 {count} 项？目录及其内容会被删除，符号链接仅删除链接本身。',
 		mode: '权限（八进制）',
@@ -47,6 +48,7 @@ export const fileMessages = {
 		connect: 'Connect to server',
 		browse: 'Browse directories',
 		overwrite: 'Replace existing files?',
+		extractOverwrite: 'Replace existing files when extracting',
 		overwriteHint:
 			'The destination contains existing files. Confirm to replace files and merge folders. Files and folders cannot replace each other.',
 		removeHint:
@@ -82,6 +84,7 @@ export const fileErrors = {
 		WORKSPACE_DIRECTORY_REPLACED: '目录请求已被后续请求替换。',
 		WORKSPACE_DIRECTORY_CANCELED: '目录切换等待已取消。',
 		WORKSPACE_FILE_EXISTS: '目标已有同名文件。',
+		REMOTE_TOOLS_FILE_EXISTS: '目标已有同名文件。请更改目标位置，或明确允许覆盖后重新操作。',
 		WORKSPACE_FILE_NOT_FOUND: '找不到远程文件。',
 		WORKSPACE_FILE_PERMISSION_DENIED: '没有权限访问远程文件。',
 		REMOTE_TOOLS_ARCHIVE_UNSAFE: '压缩包包含不安全的路径或文件类型。',
@@ -105,6 +108,8 @@ export const fileErrors = {
 		WORKSPACE_DIRECTORY_REPLACED: 'A newer directory request replaced this request.',
 		WORKSPACE_DIRECTORY_CANCELED: 'Waiting for the directory change was canceled.',
 		WORKSPACE_FILE_EXISTS: 'The destination already exists.',
+		REMOTE_TOOLS_FILE_EXISTS:
+			'The destination already exists. Choose another destination or explicitly allow replacement and try again.',
 		WORKSPACE_FILE_NOT_FOUND: 'The remote file was not found.',
 		WORKSPACE_FILE_PERMISSION_DENIED: 'Permission to access the remote file was denied.',
 		REMOTE_TOOLS_ARCHIVE_UNSAFE: 'The archive contains unsafe paths or file types.',

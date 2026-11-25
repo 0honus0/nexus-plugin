@@ -44,6 +44,7 @@ it('keeps the refresh indicator idle while following the terminal and preserves 
 		await vi.waitFor(() => expect(f.files.loading.value).toBe(true));
 		expect(f.files.showRefreshLoading.value).toBe(false);
 		expect(f.files.path.value).toBe('/old');
+		expect(f.files.directoryChanging.value).toBe(true);
 		listing.resolve({ path: '/new', entries: [] });
 		await pending;
 		expect(f.files.path.value).toBe('/new');
@@ -62,6 +63,7 @@ it('keeps the refresh indicator idle while following the terminal and preserves 
 		f.revision.value++;
 		expect(f.files.loading.value).toBe(true);
 		expect(f.files.showRefreshLoading.value).toBe(false);
+		expect(f.files.directoryChanging.value).toBe(false);
 		background.resolve({ path: '/new', entries: [] });
 		await vi.waitFor(() => expect(f.files.loading.value).toBe(false));
 	} finally {

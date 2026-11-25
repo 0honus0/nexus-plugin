@@ -195,3 +195,26 @@ it('recognizes the host HTTP error code and only replaces an existing destinatio
 		scope.stop();
 	}
 });
+
+it('requires explicit opt-in on each archive extraction and clears canceled password drafts', async () => {
+	const { operations, scope } = setup();
+	try {
+		const archive = { ...file, name: 'archive.zip', path: '/archive.zip' };
+		operations.open('extract', [archive], '/target', 'zip');
+		expect(operations.state.replaceExisting).toBe(false);
+		operations.state.password = 'fixture';
+		operations.close();
+		expect(operations.state.password).toBe('');
+		operations.open('extract', [archive], '/target', 'zip');
+		await operations.save();
+		expect(request.mock.calls[0]?.[2]).toMatchObject({ overwrite: false, destination: '/target' });
+		operations.open('extract', [archive], '/target', 'zip');
+		operations.state.replaceExisting = true;
+		await operations.save();
+		expect(request.mock.calls[1]?.[2]).toMatchObject({ overwrite: true, destination: '/target' });
+		operations.open('extract', [archive], '/target', 'zip');
+		expect(operations.state.replaceExisting).toBe(false);
+	} finally {
+		scope.stop();
+	}
+});

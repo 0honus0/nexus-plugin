@@ -62,12 +62,15 @@ export function createWorkspaceTransfers(ctx: PluginContextApi, view: PluginWind
 					}
 					tasks.value = [...current.values()];
 				}
+				let directoryChanged = false;
 				for (const task of tasks.value)
 					if (isTransferFinished(task.state) && !completedIds.has(task.id)) {
 						completedIds.add(task.id);
 						if (task.state === 'completed') {
 							retryFiles.delete(task.id);
-							completed();
+							// Downloads never modify remote directory contents. Coalesce all
+							// mutations in this throttled event into one invalidation.
+							directoryChanged ||= task.kind !== 'download';
 						}
 						if (task.error && ['failed', 'unknown'].includes(task.state))
 							ctx.app.log.report({
@@ -80,6 +83,7 @@ export function createWorkspaceTransfers(ctx: PluginContextApi, view: PluginWind
 								userVisible: false,
 							});
 					}
+				if (directoryChanged) completed();
 			} catch (cause) {
 				client.report(cause);
 			}

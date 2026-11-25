@@ -350,9 +350,17 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	] as const) {
 		const targetPane = workspace.locator('.workspace-dock-anchor[data-pane="status"]');
 		const sourcePane = workspace.locator('.workspace-dock-anchor[data-pane="terminal"]');
+		await expect.poll(geometry).toEqual(original);
+		// Target Dockview's actual drop surface rather than a teleported pane whose
+		// content can be clipped by its group, especially near the bottom edge.
+		const targetSurface = workspace
+			.locator('.dv-groupview')
+			.filter({ has: page.locator('.workspace-pane-grip').filter({ hasText: 'Server status' }) })
+			.locator('.dv-content-container');
+		await expect(targetSurface).toBeVisible();
 		const initial = await geometry();
 		const from = (await terminalGrip.boundingBox())!;
-		const to = (await targetPane.boundingBox())!;
+		const to = (await targetSurface.boundingBox())!;
 		await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
 		await page.mouse.down();
 		try {

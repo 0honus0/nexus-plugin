@@ -65,7 +65,7 @@ jobs:
           persist-credentials: false
       - uses: ./home/nexus-plugin/.github/actions/setup
         with:
-          test-host: 'true'
+          test-host: 'source'
       - working-directory: home/nexus-plugin
         env:
           PLUGIN_NAME: ${{ matrix.plugin }}

@@ -1,8 +1,8 @@
 # SDK 测试插件
 
-测试使用宿主 `v0.0.16-dev` 对应镜像和 SDK `1.2.0`。SDK 压缩包固定在仓库的 `vendor/`，安装和构建无需链接本体源码。格式化继续共用本体的 `@nexus-terminal/format` 工具。
+测试使用固定宿主提交对应镜像和 SDK `1.2.0`。SDK 压缩包固定在仓库的 `vendor/`，安装和构建无需链接本体源码。格式化继续共用本体的 `@nexus-terminal/format` 工具。
 
-- 默认镜像由 `scripts/ci/host-image.txt` 固定到本体发布提交，可用 `NEXUS_TEST_IMAGE` 指定兼容镜像。
+- 默认镜像由 `scripts/ci/host-image.txt` 固定到本体提交。普通 CI 从该提交构建本地镜像，不发布；发布工作流必须等待对应已发布镜像，不回退旧版。独立本地测试可用 `NEXUS_TEST_IMAGE` 指定同一协议的候选镜像，原生测试沿用该设置。停用插件必须先查询运行影响修订号。
 - SDK 压缩包为 `vendor/nexus-terminal-1.2.0.tgz`，完整性由锁文件校验。
 
 ## 运行

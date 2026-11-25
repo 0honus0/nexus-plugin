@@ -2,7 +2,7 @@ name: Set up plugin repository
 description: Install pinned Node, pnpm and the shared host format tool
 inputs:
   test-host:
-    description: Pull the matching host image before integration tests
+    description: Host preparation (false, source for CI, true for published release image)
     default: 'false'
 runs:
   using: composite
@@ -27,6 +27,33 @@ runs:
       shell: bash
       working-directory: home/nexus-plugin
 
+    - name: Resolve exact candidate host revision
+      if: inputs.test-host == 'source'
+      id: host
+      shell: bash
+      working-directory: home/nexus-plugin
+      run: |
+        set -euo pipefail
+        image="$(cat scripts/ci/host-image.txt)"
+        [[ "$image" =~ ^ghcr\.io/0honus0/nexus-terminal:sha-([0-9a-f]{40})$ ]]
+        echo "revision=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      if: inputs.test-host == 'source'
+      with:
+        repository: 0honus0/nexus-terminal
+        ref: ${{ steps.host.outputs.revision }}
+        path: home/nexus-host-candidate
+        persist-credentials: false
+    - name: Build exact candidate host for CI (no publish)
+      if: inputs.test-host == 'source'
+      shell: bash
+      working-directory: home/nexus-plugin
+      run: |
+        set -euo pipefail
+        image="$(cat scripts/ci/host-image.txt)"
+        [[ "$(git -C ../nexus-host-candidate rev-parse HEAD)" == "${image##*:sha-}" ]]
+        docker build -t "$image" ../nexus-host-candidate
+
     - name: Wait for matching host image
       if: inputs.test-host == 'true'
       shell: bash
@@ -34,7 +61,7 @@ runs:
       run: |
         set -euo pipefail
         image="$(cat scripts/ci/host-image.txt)"
-        # A coordinated release can start plugin CI before the host image is published.
+        # A coordinated release can start before the host image is published.
         # Do not fall back to a moving dev tag or an older SDK.
         for attempt in $(seq 1 60); do
           if timeout 15 docker manifest inspect "$image" >/dev/null 2>&1; then

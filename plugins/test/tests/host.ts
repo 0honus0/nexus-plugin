@@ -256,7 +256,13 @@ export async function setEnabled(
 	id: string,
 	enabled: boolean,
 ): Promise<void> {
-	await host.operation(manager + '/plugins/' + encodeURIComponent(id), { enabled }, 'PATCH');
+	const endpoint = manager + '/plugins/' + encodeURIComponent(id);
+	if (enabled) {
+		await host.operation(endpoint, { enabled: true }, 'PATCH');
+		return;
+	}
+	const { revision } = z.object({ revision: z.hash('sha256') }).parse(await host.json(endpoint + '/runtime-impact'));
+	await host.operation(endpoint, { enabled: false, impactRevision: revision }, 'PATCH');
 }
 
 export async function uninstall(host: Awaited<ReturnType<typeof startHost>>, id: string): Promise<void> {

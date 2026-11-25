@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-base="$(cat "$root/scripts/ci/host-image.txt")"
+base="${NEXUS_TEST_IMAGE:-$(cat "$root/scripts/ci/host-image.txt")}"
 image="nexus-remote-tools-native-test:$(date +%s)-$$"
 trap 'docker image rm "$image" >/dev/null 2>&1 || true' EXIT
 docker build --build-arg "HOST_IMAGE=$base" -f "$root/scripts/ci/native-transfer.Dockerfile" -t "$image" "$root/scripts/ci"

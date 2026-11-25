@@ -12,6 +12,9 @@
 	}>();
 	const { t } = props.i18n;
 	const s = props.operations.state;
+	// The host identity dialog owns the modal layer during a destination connection.
+	// Keep the captured source selection and destination draft while it is hidden.
+	const connectingDestination = computed(() => s.kind === 'send' && props.operations.connectPending.value);
 	const title = computed(() =>
 		t(
 			['mkdir', 'file', 'rename', 'remove'].includes(s.kind ?? '')
@@ -29,14 +32,14 @@
 </script>
 <template>
 	<UiDialog
-		:open="!!s.kind && !s.overwrite"
+		:open="!!s.kind && !s.overwrite && !connectingDestination"
 		:title="title"
 		:description="s.kind === 'remove' ? t('filesMenu.removeHint', { count: s.entries.length }) : undefined"
 		:close-label="t('close')"
 		:show-close="!busy"
 		:close-on-escape="!busy"
 		:close-on-interact-outside="!busy"
-		@update:open="!$event && operations.close()"
+		@update:open="!$event && !connectingDestination && operations.close()"
 	>
 		<form
 			v-if="s.kind !== 'remove'"

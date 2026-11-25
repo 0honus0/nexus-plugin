@@ -41,6 +41,7 @@ export function useWorkspaceSessions(props: {
 	const suspendedClose = ref<SessionInfo>();
 	const removingSuspended = ref(false);
 	let resolveConfirmation: ((value: boolean) => void) | undefined;
+	let activateConnection = true;
 
 	function readConnectionsState<Value>(fallback: Value, read: (client: ConnectionsClientApi) => Value): Value {
 		const client = connections.value;
@@ -200,7 +201,7 @@ export function useWorkspaceSessions(props: {
 		}
 	}
 
-	function start(id: string) {
+	function start(id: string, activate = true) {
 		if (connecting.value || closingWindow.value || suspending.value) return;
 		const connection = savedConnections.value.find((c) => c.id === id);
 		if (!connection || connection.type !== 'ssh') return;
@@ -209,6 +210,7 @@ export function useWorkspaceSessions(props: {
 			return;
 		}
 		selected.value = id;
+		activateConnection = activate;
 		void connect();
 	}
 
@@ -225,10 +227,10 @@ export function useWorkspaceSessions(props: {
 		}
 	}
 
-	function add(session: SessionInfo) {
+	function add(session: SessionInfo, activate = true) {
 		if (closingWindow.value || suspending.value || removingSuspended.value || suspendedClose.value) return;
 		if (!tabs.value.some((s) => s.id === session.id)) tabs.value.push(session);
-		active.value = session.id;
+		if (activate) active.value = session.id;
 	}
 
 	async function connect(fingerprint?: string) {
@@ -250,7 +252,7 @@ export function useWorkspaceSessions(props: {
 				return;
 			}
 			host.value = undefined;
-			add(value.session);
+			add(value.session, activateConnection);
 		} catch (cause) {
 			if (cause instanceof PluginHttpError && cause.code === 'WORKSPACE_CREDENTIAL_REQUIRED')
 				await editCredential(selected.value);

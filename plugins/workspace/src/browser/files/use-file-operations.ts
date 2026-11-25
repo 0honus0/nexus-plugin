@@ -76,9 +76,23 @@ export function useFileOperations(
 		);
 	});
 
+	// A directory response belongs to the exact dialog draft and destination session.
+	// Reopening or editing the draft must not reuse a previous request's result.
+	function invalidateBrowse() {
+		browseGeneration++;
+		state.reading = false;
+		state.browsing = false;
+		state.directories = [];
+	}
+
+	watch([() => state.server, () => state.destination, () => destinationSession.value?.id], invalidateBrowse, {
+		flush: 'sync',
+	});
+
 	async function perform(action: (overwrite: boolean) => Promise<void>, overwrite = false, allowOverwrite = true) {
 		if (files.mutating.value) return;
 		files.mutating.value = true;
+		invalidateBrowse();
 		try {
 			await action(overwrite);
 			shared.changed();
@@ -107,6 +121,7 @@ export function useFileOperations(
 		if (files.mutating.value || (kind === 'remove' && !entries.length)) return;
 		// All deletion entry points use this policy; direct deletion never opens a transient dialog.
 		if (kind === 'remove' && !confirmDeletion()) return remove(entries);
+		invalidateBrowse();
 		Object.assign(state, {
 			kind,
 			entries: [...entries],
@@ -223,10 +238,9 @@ export function useFileOperations(
 	}
 
 	async function browse(directory = state.destination) {
-		const generation = ++browseGeneration;
-		const server = state.server;
 		const id = state.kind === 'send' ? destinationSession.value?.id : sessionId;
-		if (!id || state.reading) return;
+		if (!id || state.reading || !['send', 'extract'].includes(state.kind ?? '')) return;
+		const generation = ++browseGeneration;
 		state.reading = true;
 		try {
 			const result = await client.request(
@@ -235,14 +249,14 @@ export function useFileOperations(
 				undefined,
 				DirectorySchema,
 			);
-			if (generation !== browseGeneration || server !== state.server || signal.aborted) return;
+			if (generation !== browseGeneration || signal.aborted) return;
 			state.destination = result.path;
 			state.directories = result.entries.filter((e) => e.kind === 'directory');
 			state.browsing = true;
 		} catch (cause) {
-			client.report(cause);
+			if (generation === browseGeneration && !signal.aborted) client.report(cause);
 		} finally {
-			state.reading = false;
+			if (generation === browseGeneration) state.reading = false;
 		}
 	}
 
@@ -267,10 +281,13 @@ export function useFileOperations(
 		paste,
 		browse,
 
+		connectPending: shared.connectPending,
+
 		connect: () => shared.connect(state.server),
 
 		close() {
 			if (!files.mutating.value) {
+				invalidateBrowse();
 				state.kind = undefined;
 				state.password = '';
 				state.overwrite = false;

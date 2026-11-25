@@ -19,6 +19,7 @@ vi.mock('../src/browser/files/workspace-files-state', () => ({
 	useWorkspaceFilesState: () => ({
 		sessions: { value: [] },
 		connections: { value: [] },
+		connectPending: { value: false },
 		changed,
 		clipboard,
 		consumed,
@@ -214,6 +215,50 @@ it('requires explicit opt-in on each archive extraction and clears canceled pass
 		expect(request.mock.calls[1]?.[2]).toMatchObject({ overwrite: true, destination: '/target' });
 		operations.open('extract', [archive], '/target', 'zip');
 		expect(operations.state.replaceExisting).toBe(false);
+	} finally {
+		scope.stop();
+	}
+});
+
+it('ignores an old directory picker response after canceling and reopening the file dialog', async () => {
+	const { operations, scope } = setup();
+	try {
+		const archive = { ...file, name: 'archive.zip', path: '/archive.zip' };
+		const old = Promise.withResolvers<unknown>();
+		request.mockReturnValueOnce(old.promise);
+		operations.open('extract', [archive], '/old', 'zip');
+		const pending = operations.browse();
+		expect(operations.state.reading).toBe(true);
+		operations.close();
+		operations.open('extract', [archive], '/new', 'zip');
+		request.mockResolvedValueOnce({ path: '/new', entries: [] });
+		await operations.browse();
+		expect(operations.state.destination).toBe('/new');
+		expect(operations.state.browsing).toBe(true);
+		old.resolve({ path: '/old', entries: [folder] });
+		await pending;
+		expect(operations.state.destination).toBe('/new');
+		expect(operations.state.directories).toEqual([]);
+		expect(operations.state.reading).toBe(false);
+	} finally {
+		scope.stop();
+	}
+});
+
+it('does not overwrite a manually edited destination with a delayed directory picker result', async () => {
+	const { operations, scope } = setup();
+	try {
+		const archive = { ...file, name: 'archive.zip', path: '/archive.zip' };
+		const old = Promise.withResolvers<unknown>();
+		request.mockReturnValueOnce(old.promise);
+		operations.open('extract', [archive], '/old', 'zip');
+		const pending = operations.browse();
+		operations.state.destination = '/typed';
+		old.resolve({ path: '/old', entries: [folder] });
+		await pending;
+		expect(operations.state.destination).toBe('/typed');
+		expect(operations.state.browsing).toBe(false);
+		expect(operations.state.reading).toBe(false);
 	} finally {
 		scope.stop();
 	}

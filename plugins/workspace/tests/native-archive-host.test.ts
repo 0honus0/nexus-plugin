@@ -23,7 +23,7 @@ const directory = '/tmp/nexus-archive-fixture';
 // required in its separate CI invocation. All files and the loopback sshd live
 // inside the disposable host container, not on the runner or a user server.
 it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
-	'compresses, extracts and downloads real files using the Workspace UI over native OpenSSH',
+	'uses native OpenSSH for archive, shell directory and cross-connection file workflows',
 	async () => {
 		await using resources = new AsyncDisposableStack();
 		const host = await startHost(resources, id, [
@@ -47,12 +47,15 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 			[
 				'set -eu',
 				'umask 077',
-				'mkdir -p /run/sshd "$1/output"',
+				'mkdir -p /run/sshd "$1/output" "$1/target"',
 				'printf "%s\n" "$2" > "$1/authorized_keys"',
 				'printf "%s" "native archive bytes" > "$1/source.txt"',
 				'ssh-keygen -q -t ed25519 -N "" -f "$1/host"',
 				'printf "%s\n" "Port 22022" "ListenAddress 127.0.0.1" "HostKey $1/host" "PidFile $1/pid" "AuthorizedKeysFile $1/authorized_keys" "StrictModes no" "PubkeyAuthentication yes" "PasswordAuthentication no" "KbdInteractiveAuthentication no" "UsePAM no" "PermitRootLogin yes" "Subsystem sftp internal-sftp" > "$1/sshd_config"',
 				'/usr/sbin/sshd -f "$1/sshd_config"',
+				'ssh-keygen -q -t ed25519 -N "" -f "$1/target-host"',
+				'sed -e "s/Port 22022/Port 22023/" -e "s|HostKey $1/host|HostKey $1/target-host|" -e "s|PidFile $1/pid|PidFile $1/target-pid|" "$1/sshd_config" > "$1/target-config"',
+				'/usr/sbin/sshd -f "$1/target-config"',
 			].join('\n'),
 			'fixture',
 			directory,
@@ -88,6 +91,21 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 			'POST',
 			201,
 		);
+		await host.json(
+			resource('connections') + '/connections',
+			{
+				connection: {
+					name: 'Native transfer target',
+					type: 'ssh',
+					host: '127.0.0.1',
+					port: 22023,
+					credentialId: credential.id,
+					tags: [],
+				},
+			},
+			'POST',
+			201,
+		);
 		const { page, origin } = await startBrowser(resources, host.origin, {
 			viewport: { width: 1600, height: 1000 },
 			locale: 'en-US',
@@ -109,7 +127,7 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 			.getByRole('dialog', { name: 'Verify server identity' })
 			.getByRole('button', { name: 'Trust and connect' })
 			.click();
-		const files = workspace.locator('.workspace-files');
+		const files = workspace.locator('.workspace-tab-panel[data-state="active"] .workspace-files');
 		const path = files.getByRole('combobox', { name: 'Remote path' });
 		await path.fill(directory);
 		await path.press('Enter');
@@ -223,6 +241,83 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 		await browserExpect(
 			center.locator('.workspace-transfer-task[data-state="completed"]').filter({ hasText: 'source.txt' }),
 		).toBeVisible();
+		await center.getByRole('button', { name: 'Collapse', exact: true }).click();
+
+		// Both directions must observe the actual interactive shell, not an exec-channel cwd.
+		const syncToTerminal = page.waitForResponse(
+			(response) => response.url().endsWith('/terminal-directory') && response.request().method() === 'POST',
+		);
+		await files.getByRole('button', { name: 'Change terminal to this directory', exact: true }).click();
+		const changed = await syncToTerminal;
+		expect(changed.status(), await changed.text()).toBe(200);
+		expect(await changed.json()).toEqual({ path: directory + '/output' });
+		const terminal = workspace.locator('.workspace-tab-panel[data-state="active"] .workspace-terminal');
+		const input = terminal.locator('.xterm-helper-textarea');
+		await input.focus();
+		await page.keyboard.type('cd ' + directory + '; printf "nexus-shell-cwd-ready\\n"');
+		await page.keyboard.press('Enter');
+		await browserExpect(terminal.locator('.xterm-rows')).toContainText('nexus-shell-cwd-ready');
+		await expect
+			.poll(async () => {
+				const response = await page.request.get(changed.url());
+				return response.ok() ? await response.json() : null;
+			})
+			.toEqual({ path: directory });
+		await files.getByRole('button', { name: 'Follow terminal directory', exact: true }).click();
+		await browserExpect(path).toHaveValue(directory);
+		await browserExpect(file('qa.tar.gz')).toBeVisible();
+
+		// Connect a second native endpoint from the actual send dialog without losing the source.
+		await file('source.txt').click({ button: 'right' });
+		await page.getByRole('menuitem', { name: 'Send to server', exact: true }).click();
+		const send = page.getByRole('dialog', { name: 'Send to server', exact: true });
+		await send.getByRole('combobox', { name: 'Destination server' }).click();
+		await page.getByRole('option', { name: 'Native transfer target', exact: true }).click();
+		await browserExpect(send.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await send.getByRole('button', { name: 'Connect to server', exact: true }).click();
+		const identity = page.getByRole('dialog', { name: 'Verify server identity' });
+		await browserExpect(identity).toBeVisible();
+		await browserExpect(send).toHaveCount(0);
+		await identity.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await browserExpect(send).toBeVisible();
+		await browserExpect(send.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await send.getByRole('button', { name: 'Connect to server', exact: true }).click();
+		await identity.getByRole('button', { name: 'Trust and connect' }).click();
+		await browserExpect(send).toBeVisible();
+		await browserExpect(send.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+		await send.getByRole('textbox', { name: 'Destination directory' }).fill(directory);
+		await send.getByRole('button', { name: 'Browse directories', exact: true }).click();
+		await send.getByRole('button', { name: 'target', exact: true }).click();
+		await browserExpect(send.getByRole('textbox', { name: 'Destination directory' })).toHaveValue(
+			directory + '/target',
+		);
+		const sent = page.waitForResponse(
+			(response) => response.url().endsWith('/files/transfer') && response.request().method() === 'POST',
+		);
+		await send.getByRole('button', { name: 'Save', exact: true }).click();
+		const accepted = await sent;
+		expect(accepted.status(), await accepted.text()).toBe(202);
+		expect(accepted.request().postDataJSON()).toMatchObject({
+			paths: [directory + '/source.txt'],
+			destination: directory + '/target',
+			move: false,
+			overwrite: false,
+		});
+		await browserExpect(send).toHaveCount(0);
+		await browserExpect(workspace.getByRole('tab', { name: 'Native archive SSH', exact: true })).toHaveAttribute(
+			'aria-selected',
+			'true',
+		);
+		await workspace.getByRole('button', { name: 'Transfers', exact: true }).click();
+		await center.getByRole('tab', { name: 'History', exact: true }).click();
+		const completedCopy = center
+			.locator('.workspace-transfer-task[data-state="completed"]')
+			.filter({ hasText: 'Native transfer target' })
+			.filter({ hasText: 'source.txt' });
+		await browserExpect(completedCopy).toBeVisible({ timeout: 15000 });
+		await browserExpect(completedCopy).toContainText('rsync');
+		expect((await docker('cat', directory + '/target/source.txt')).stdout).toBe('native archive bytes');
+		expect((await docker('cat', directory + '/source.txt')).stdout).toBe('native archive bytes');
 		expect(errors).toEqual([]);
 	},
 	120000,

@@ -109,7 +109,12 @@
 		},
 	);
 
-	filesState = createWorkspaceFilesState(tabs, savedConnections, start);
+	filesState = createWorkspaceFilesState(
+		tabs,
+		savedConnections,
+		(id) => start(id, false),
+		computed(() => connecting.value || !!host.value),
+	);
 	provide(workspaceFilesStateKey, filesState);
 	const attachment = ref<Record<string, AttachmentStatus>>({});
 	watch(

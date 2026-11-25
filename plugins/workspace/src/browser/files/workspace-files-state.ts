@@ -7,6 +7,7 @@ export function createWorkspaceFilesState(
 	sessions: Ref<SessionInfo[]>,
 	connections: ComputedRef<readonly { id: string; name: string; type: string }[]>,
 	connect: (id: string) => void,
+	connectPending: Readonly<Ref<boolean>>,
 ) {
 	const clipboard = shallowRef<FileClipboard>();
 	const revision = ref(0);
@@ -20,6 +21,7 @@ export function createWorkspaceFilesState(
 		sessions,
 		connections,
 		connect,
+		connectPending,
 
 		changed: () => {
 			revision.value++;

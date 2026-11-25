@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { startBrowser } from '../../test/tests/browser-session.js';
 import { backupPath, pluginFixture, setEnabled, startHost, until } from '../../test/tests/host.js';
 import { collectBrowserErrors, expectFormFields } from '../../test/tests/browser-checks.js';
 import { z } from 'zod';
@@ -15,7 +16,7 @@ const connections = base + '/connections';
 
 test(
 	'packaged Connections handles profile types, normalized tags and cross-plugin credential references',
-	{ timeout: 45000 },
+	{ timeout: process.env.NEXUS_TEST_CDP ? 120000 : 45000 },
 	async () => {
 		await using resources = new AsyncDisposableStack();
 		const host = await startHost(resources, pluginId, [
@@ -79,9 +80,7 @@ test(
 			.object({ format: z.literal(1), payload: z.string().min(1) })
 			.parse(await host.json(backupPath + '/export', { password }));
 
-		const browser = await chromium.launch();
-		resources.defer(() => browser.close());
-		const page = await browser.newPage({ locale: 'en-US' });
+		const { page, origin } = await startBrowser(resources, host.origin, { locale: 'en-US' });
 		const browserErrors = collectBrowserErrors(page);
 		page.setDefaultTimeout(8000);
 		const requested = Promise.withResolvers<void>();
@@ -93,7 +92,7 @@ test(
 			await release.promise;
 			await route.fallback();
 		});
-		await page.goto(host.origin);
+		await page.goto(origin);
 		await page.getByRole('textbox', { name: 'Username' }).fill('owner');
 		await page.locator('input[type=password]').fill('sdk-fixture-password');
 		await page.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -165,6 +164,14 @@ test(
 		await manager.getByRole('button', { name: 'Close application' }).click();
 		await expect(dialog.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Browser connection');
 		await expect(dialog.getByRole('textbox', { name: 'Host', exact: true })).toHaveValue('browser.example.test');
+		await page.keyboard.press('Escape');
+		await expect(dialog).toHaveCount(0);
+		const add = app.getByRole('button', { name: 'Add connection', exact: true });
+		await expect(add).toBeFocused();
+		await page.keyboard.press('Enter');
+		await expect(dialog.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('');
+		await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Browser connection');
+		await dialog.getByRole('textbox', { name: 'Host', exact: true }).fill('browser.example.test');
 		await dialog.getByRole('button', { name: 'Tags', exact: true }).click();
 		await dialog.getByRole('button', { name: 'Delete tag “' + catalog.tags[0].name + '”' }).click();
 		const deleteTag = page.getByRole('dialog', { name: 'Delete tag', exact: true });

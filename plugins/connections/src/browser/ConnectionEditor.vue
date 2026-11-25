@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
 
-	import { computed, ref, useId, watch } from 'vue';
+	import { computed, nextTick, ref, useId, watch } from 'vue';
 	import type { PluginWindowApi } from 'nexus-terminal/browser';
 	import { UiDialog, UiButton, UiInput, UiSelect, UiField } from 'nexus-terminal/browser/ui';
 	import { Save } from '@lucide/vue';
@@ -40,6 +40,8 @@
 	const port = ref(String(defaults?.port ?? 22));
 	const saving = ref(false);
 	const managing = ref(false);
+	const active = document.activeElement;
+	const opener = active instanceof HTMLElement && active.closest('.connections-app') ? active : undefined;
 	const credentialOptions = computed(() => [
 		{ value: 'none', label: t('noCredential') },
 		...(credentials.value?.items.value ?? []).map((c) => ({
@@ -65,8 +67,14 @@
 
 	watch(
 		() => props.view.state.value.focused,
-		(focused) => {
-			if (focused) managing.value = false;
+		async (focused) => {
+			if (!focused || !managing.value) return;
+			// Restore the original trigger before remounting the dialog, not the
+			// control from the credential window that is being closed.
+			await nextTick();
+			if (!props.view.state.value.focused || !managing.value || props.signal.aborted) return;
+			if (opener?.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true });
+			managing.value = false;
 		},
 	);
 

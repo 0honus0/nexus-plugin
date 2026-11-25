@@ -341,6 +341,38 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	await layout.click();
 	await page.getByRole('menuitem', { name: 'Reset layout', exact: true }).click();
 
+	// Exercise all four real half-pane targets with the terminal as the source.
+	for (const [edge, fx, fy, axis, sign] of [
+		['left', 0.15, 0.5, 'x', -1],
+		['right', 0.85, 0.5, 'x', 1],
+		['top', 0.5, 0.15, 'y', -1],
+		['bottom', 0.5, 0.85, 'y', 1],
+	] as const) {
+		const targetPane = workspace.locator('.workspace-dock-anchor[data-pane="status"]');
+		const sourcePane = workspace.locator('.workspace-dock-anchor[data-pane="terminal"]');
+		const initial = await geometry();
+		const from = (await terminalGrip.boundingBox())!;
+		const to = (await targetPane.boundingBox())!;
+		await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+		await page.mouse.down();
+		try {
+			await page.mouse.move(to.x + to.width * fx, to.y + to.height * fy, { steps: 25 });
+			await expect(workspace.locator(`.dv-drop-target-selection.dv-drop-target-${edge}:visible`)).toHaveCount(1);
+		} finally {
+			await page.mouse.up();
+		}
+		await expect.poll(geometry).not.toEqual(initial);
+		await expect
+			.poll(async () => {
+				const a = (await sourcePane.boundingBox())!;
+				const b = (await targetPane.boundingBox())!;
+				return Math.sign(a[axis] - b[axis]);
+			})
+			.toBe(sign);
+		await layout.click();
+		await page.getByRole('menuitem', { name: 'Reset layout', exact: true }).click();
+	}
+
 	const grip = workspace.locator('.workspace-pane-grip').filter({ hasText: 'Server status' });
 	await expect(grip).toBeVisible();
 	const terminalPane = workspace.locator('.workspace-dock-anchor[data-pane="terminal"]');

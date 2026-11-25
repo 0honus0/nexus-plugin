@@ -129,9 +129,20 @@ test(
 			await expect(card.locator('.ui-card__side .ui-card__badge')).toHaveCount(0);
 			const menu = card.getByRole('button', { name: 'More actions · ' + type + ' fixture' });
 			await expect(menu).toBeVisible();
-			const bounds = (await card.boundingBox())!;
-			const action = (await menu.boundingBox())!;
-			expect(action.y + action.height / 2).toBeCloseTo(bounds.y + bounds.height / 2, 0);
+			// Read both rectangles in the same browser frame while window motion is active.
+			const centers = await card.evaluate(
+				(element, label) => {
+					const action = Array.from(element.querySelectorAll('button')).find(
+						(button) => button.getAttribute('aria-label') === label,
+					);
+					if (!action) throw new Error('Missing connection action');
+					const bounds = element.getBoundingClientRect();
+					const menuBounds = action.getBoundingClientRect();
+					return { card: bounds.y + bounds.height / 2, menu: menuBounds.y + menuBounds.height / 2 };
+				},
+				'More actions · ' + type + ' fixture',
+			);
+			expect(centers.menu).toBeCloseTo(centers.card, 0);
 		}
 		await expect(
 			app.locator('.connections-card').filter({ hasText: 'SSH fixture' }).locator('.connections-tag'),
@@ -185,6 +196,25 @@ test(
 			await expect(toast).toHaveCount(0);
 		}
 		await expect(tile.locator('.connections-tile__total strong')).toHaveText('4');
+
+		// An empty tag catalog must not trap Escape in an invisible overlay.
+		await add.click();
+		const tags = dialog.getByRole('combobox', { name: 'Tags', exact: true });
+		await tags.click();
+		await expect(tags).toHaveAttribute('aria-expanded', 'true');
+		await expect(dialog.getByRole('status').filter({ hasText: 'No tags available' })).toBeVisible();
+		await tags.fill('QA draft tag');
+		await dialog.getByRole('option', { name: 'Create “QA draft tag”' }).click();
+		await expect(dialog.getByRole('button', { name: 'Deselect “QA draft tag”' })).toBeVisible();
+		await dialog.getByRole('button', { name: 'Deselect “QA draft tag”' }).click();
+		await tags.click();
+		await expect(dialog.getByRole('status').filter({ hasText: 'No tags available' })).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(tags).toHaveAttribute('aria-expanded', 'false');
+		await expect(dialog).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(dialog).toHaveCount(0);
+		await expect(add).toBeFocused();
 
 		assert.deepEqual(ConnectionSchema.parse(await host.json(connections + '/' + ssh.id)).tags, []);
 		assert.equal((await host.request(connections + '/' + ssh.id, { method: 'DELETE' })).status, 204);

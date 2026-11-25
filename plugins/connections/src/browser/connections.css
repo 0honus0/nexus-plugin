@@ -190,6 +190,11 @@
 	padding: 5px;
 	box-shadow: 0 8px 24px #00000012;
 }
+.connections-tag-empty {
+	padding: 9px;
+	font-size: 13px;
+	color: var(--ui-muted);
+}
 .connections-tag-option-row {
 	display: flex;
 	align-items: center;

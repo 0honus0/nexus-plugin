@@ -123,7 +123,6 @@
 			</ComboboxAnchor>
 			<ComboboxPortal :to="portalTarget" :disabled="!portalTarget">
 				<ComboboxContent
-					v-if="choices.length || create"
 					class="connections-tag-dropdown"
 					position="popper"
 					align="start"
@@ -137,6 +136,9 @@
 					"
 				>
 					<ComboboxViewport>
+						<div v-if="!choices.length && !create" class="connections-tag-empty" role="status">
+							{{ t('noTags') }}
+						</div>
 						<div v-for="{ name, tag } in choices" :key="name" class="connections-tag-option-row">
 							<ComboboxItem :value="name" class="connections-tag-option"
 								><span>{{ name }}</span

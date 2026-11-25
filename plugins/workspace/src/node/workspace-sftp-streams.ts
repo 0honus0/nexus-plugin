@@ -131,10 +131,27 @@ export async function downloadSftpFile(
 ) {
 	const source = readSftpFile(sftp, path, options);
 	let bytes = 0;
-	source.on('data', (chunk: Buffer) => {
-		bytes += chunk.length;
-		options.progress?.(bytes);
-	});
-	await pipeline(source, destination, { signal: options.signal });
+
+	// A fixed-length HTTP download can finish at the client as soon as its last
+	// byte arrives. Keep one chunk until EOF (including SFTP CLOSE) is confirmed.
+	async function* confirmed(chunks: AsyncIterable<Buffer>) {
+		let tail: Buffer | undefined;
+		for await (const chunk of chunks) {
+			if (tail) {
+				bytes += tail.length;
+				options.progress?.(bytes);
+				yield tail;
+			}
+			tail = chunk;
+		}
+		options.signal.throwIfAborted();
+		if (tail) {
+			bytes += tail.length;
+			options.progress?.(bytes);
+			yield tail;
+		}
+	}
+
+	await pipeline(source, confirmed, destination, { signal: options.signal });
 	return bytes;
 }

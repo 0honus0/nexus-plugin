@@ -17,13 +17,18 @@ export function readSftpFile(
 		const { signal } = options;
 		signal.throwIfAborted();
 		const handle = await promisify(sftp.open.bind(sftp))(path, 'r');
+		const reads: Promise<PromiseSettledResult<Buffer>>[] = [];
 		try {
 			const attrs = await promisify(sftp.fstat.bind(sftp))(handle);
 			const end = Math.min(options.end ?? attrs.size - 1, attrs.size - 1);
-			for (let position = options.start ?? 0; position <= end;) {
-				signal.throwIfAborted();
-				const reads: Promise<Buffer>[] = [];
-				for (let index = 0; index < CONCURRENCY && position <= end; index++) {
+			let position = options.start ?? 0;
+
+			// Refill as ordered chunks are consumed, rather than waiting for the slowest
+			// request in a whole batch. Resolved out-of-order chunks occupy the same
+			// bounded window, so downstream backpressure still limits prefetch.
+			function refill() {
+				while (reads.length < CONCURRENCY && position <= end) {
+					signal.throwIfAborted();
 					const from = position,
 						length = Math.min(CHUNK, end - from + 1);
 					position += length;
@@ -42,17 +47,26 @@ export function readSftpFile(
 								used += bytes;
 							}
 							return buffer;
-						})(),
+						})().then<PromiseSettledResult<Buffer>, PromiseSettledResult<Buffer>>(
+							(value) => ({ status: 'fulfilled', value }),
+							(reason) => ({ status: 'rejected', reason }),
+						),
 					);
 				}
-				const settled = await Promise.allSettled(reads);
-				for (const item of settled) {
-					signal.throwIfAborted();
-					if (item.status === 'rejected') throw item.reason;
-					yield item.value;
-				}
+			}
+
+			refill();
+			while (reads.length) {
+				const item = await reads[0]!;
+				reads.shift();
+				signal.throwIfAborted();
+				if (item.status === 'rejected') throw item.reason;
+				yield item.value;
+				refill();
 			}
 		} finally {
+			// Neither cancellation nor a failed read may close a handle with requests in flight.
+			await Promise.allSettled(reads);
 			await promisify(sftp.close.bind(sftp))(handle);
 		}
 	}

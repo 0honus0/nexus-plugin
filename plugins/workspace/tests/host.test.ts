@@ -2,14 +2,17 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
-import { chromium, expect as browserExpect } from '@playwright/test';
+import { expect as browserExpect } from '@playwright/test';
 import WebSocket from 'ws';
 import { expect, it } from 'vitest';
 import { z } from 'zod';
 import { pluginFixture, setEnabled, startHost, until } from '../../test/tests/host.js';
+import { startBrowser } from '../../test/tests/browser-session.js';
 import { collectBrowserErrors, expectFormFields } from '../../test/tests/browser-checks.js';
 import { startWorkspaceSsh } from './fixtures/workspace-ssh.js';
 import {
+	verifyFileMutations,
+	verifyQuickCommands,
 	verifyTerminalSelection,
 	verifyWorkspaceAppearance,
 	verifyWorkspacePanels,
@@ -144,9 +147,7 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 	);
 	expect(initial.result).toEqual({ state: 'confirm-host', fingerprint });
 
-	const browser = await chromium.launch({ headless: true });
-	resources.defer(() => browser.close());
-	const page = await browser.newPage({
+	const { page, origin: browserOrigin } = await startBrowser(resources, host.origin, {
 		viewport: { width: 1600, height: 1000 },
 		locale: 'en-US',
 		reducedMotion: 'reduce',
@@ -202,7 +203,7 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 		else await route.fulfill({ status: 503, json: { code: 'CONNECTIONS_OPERATION_FAILED' } });
 	});
 
-	await page.goto(host.origin);
+	await page.goto(browserOrigin);
 	await page.getByLabel('Username', { exact: true }).fill('owner');
 	await page.getByLabel('Password', { exact: true }).fill('sdk-fixture-password');
 	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -296,11 +297,15 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 	channels[0].write('audit selectable');
 	await verifyTerminalSelection(workspace);
 	await verifyWorkspacePanels(page, workspace, host);
+	const commandBytes: Buffer[] = [];
+	channels[0].on('data', (chunk: Buffer) => commandBytes.push(Buffer.from(chunk)));
+	await verifyQuickCommands(page, workspace, host, () => Buffer.concat(commandBytes).toString('utf8'));
 	const sourceId = await verifyWorkspaceSessionPresentation(page, workspace, host, () => {
 		statusSample = Promise.withResolvers<void>();
 		return statusSample.resolve;
 	});
 	await verifyWorkspaceAppearance(page, workspace, host);
+	await verifyFileMutations(page, workspace, directory);
 
 	const destinationConnection = z.object({ id: z.uuid() }).parse(
 		await host.json(

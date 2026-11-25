@@ -69,7 +69,7 @@ export function createWorkspaceCatalog(ctx: PluginContextApi) {
 		});
 
 	const remove = (kind: CatalogResource, item: { id: string; version: number }) =>
-		mutate(kind + '/' + item.id, 'DELETE', { version: item.version });
+		mutate(kind + '/' + item.id + '?' + new URLSearchParams({ version: String(item.version) }), 'DELETE');
 
 	type PreferencesPatch = Partial<Omit<WorkspaceCatalog['preferences'], 'version' | 'display'>> & {
 		display?: TerminalDisplayPatch;

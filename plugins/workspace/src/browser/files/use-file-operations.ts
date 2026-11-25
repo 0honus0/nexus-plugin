@@ -86,7 +86,7 @@ export function useFileOperations(
 			state.overwrite = false;
 			retry = undefined;
 		} catch (cause) {
-			const code = (cause as { response?: { data?: { code?: string } } })?.response?.data?.code;
+			const code = cause && typeof cause === 'object' && 'code' in cause ? cause.code : undefined;
 			if (allowOverwrite && !overwrite && code === 'WORKSPACE_FILE_EXISTS') {
 				retry = action;
 				state.overwrite = true;

@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { startHost } from '../../../test/tests/host.js';
@@ -10,6 +11,56 @@ import { SessionListResponseSchema } from '../../src/shared/workspace-types.js';
 type Host = Awaited<ReturnType<typeof startHost>>;
 
 const base = '/api/plugins/' + encodeURIComponent('@nexus-terminal/workspace');
+
+async function exported(page: Page, trigger: Locator, filename: string) {
+	// CDP Chrome runs on another OS; Playwright's runner-side artifact directory
+	// is unavailable there. Verify the actual Blob and download event instead.
+	if (process.env.NEXUS_TEST_CDP) {
+		await page.evaluate(() => {
+			const create = URL.createObjectURL;
+			const capture = {
+				content: Promise.resolve(''),
+
+				restore: () => {
+					URL.createObjectURL = create;
+				},
+			};
+			URL.createObjectURL = (value) => {
+				if (value instanceof Blob) capture.content = value.text();
+				return create.call(URL, value);
+			};
+			Object.assign(window, { __nexusExportCapture: capture });
+		});
+		try {
+			const event = page.waitForEvent('download');
+			await trigger.click();
+			expect((await event).suggestedFilename()).toBe(filename);
+			return await page.evaluate(
+				() =>
+					(window as unknown as { __nexusExportCapture: { content: Promise<string> } }).__nexusExportCapture
+						.content,
+			);
+		} finally {
+			await page.evaluate(() => {
+				const target = window as unknown as { __nexusExportCapture?: { restore(): void } };
+				target.__nexusExportCapture?.restore();
+				delete target.__nexusExportCapture;
+			});
+		}
+	}
+	const event = page.waitForEvent('download');
+	await trigger.click();
+	const download = await event;
+	expect(download.suggestedFilename()).toBe(filename);
+	const directory = await mkdtemp(join(tmpdir(), 'nexus-download-'));
+	try {
+		const file = join(directory, 'download');
+		await download.saveAs(file);
+		return await readFile(file, 'utf8');
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+}
 
 export async function verifyWorkspaceAppearance(page: Page, workspace: Locator, host: Host): Promise<void> {
 	await workspace.getByRole('button', { name: 'Terminal settings', exact: true }).click();
@@ -29,12 +80,26 @@ export async function verifyWorkspaceAppearance(page: Page, workspace: Locator, 
 	const custom = colors.locator('.workspace-theme-card').filter({ hasText: 'Browser audit' });
 	await custom.getByRole('button', { name: 'Apply theme · Browser audit', exact: true }).click();
 	await expect(terminal).toHaveCSS('background-color', 'rgb(16, 32, 48)');
-	const theme = page.waitForEvent('download');
-	await custom.getByRole('button', { name: 'Export theme', exact: true }).click();
-	expect(JSON.parse(await readFile((await (await theme).path())!, 'utf8'))).toMatchObject({
+	expect(
+		JSON.parse(
+			await exported(
+				page,
+				custom.getByRole('button', { name: 'Export theme', exact: true }),
+				'terminal-theme.json',
+			),
+		),
+	).toMatchObject({
 		name: 'Browser audit',
 		colors: { background: '#102030', foreground: '#eef4ff' },
 	});
+
+	await custom.getByRole('button', { name: 'Delete · Browser audit', exact: true }).click();
+	await expect(custom).toHaveCount(0);
+	await expect
+		.poll(
+			async () => (await host.json(base + '/catalog')) as { themes: unknown[]; preferences: { theme: unknown } },
+		)
+		.toMatchObject({ themes: [], preferences: { theme: null } });
 
 	await settings.getByRole('tab', { name: 'Background', exact: true }).click();
 	await expect(settings.getByRole('button', { name: /Apply background · /u })).toHaveCount(20);
@@ -56,11 +121,103 @@ export async function verifyWorkspaceAppearance(page: Page, workspace: Locator, 
 	await expect
 		.poll(async () => BackgroundSnapshotSchema.parse(await host.json(base + '/appearance')).settings.enabled)
 		.toBe(true);
-	const background = page.waitForEvent('download');
-	await settings.getByRole('button', { name: 'Export background · Browser audit', exact: true }).click();
-	expect(await readFile((await (await background).path())!, 'utf8')).toBe(html);
+	expect(
+		await exported(
+			page,
+			settings.getByRole('button', { name: 'Export background · Browser audit', exact: true }),
+			'terminal-background.html',
+		),
+	).toBe(html);
+	await settings.getByRole('button', { name: 'Delete · Browser audit', exact: true }).click();
+	await expect(settings.getByRole('button', { name: 'Apply background · Browser audit', exact: true })).toHaveCount(
+		0,
+	);
+	await expect
+		.poll(async () => BackgroundSnapshotSchema.parse(await host.json(base + '/appearance')))
+		.toMatchObject({ presets: [], settings: { preset: null } });
+	await settings.locator('input[type=file][accept*="image/png"]').setInputFiles({
+		name: 'qa.png',
+		mimeType: 'image/png',
+		buffer: Buffer.from(
+			'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+			'base64',
+		),
+	});
+	await expect
+		.poll(async () => BackgroundSnapshotSchema.parse(await host.json(base + '/appearance')).image)
+		.not.toBeNull();
+	await settings.getByRole('button', { name: 'Remove image', exact: true }).click();
+	await expect
+		.poll(async () => BackgroundSnapshotSchema.parse(await host.json(base + '/appearance')).image)
+		.toBeNull();
 	await settings.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(settings).toHaveCount(0);
+}
+
+export async function verifyQuickCommands(page: Page, workspace: Locator, host: Host, received: () => string) {
+	const panel = workspace.locator('.workspace-quick-commands');
+	await expect(panel).toBeVisible();
+	await panel.getByRole('button', { name: 'New command', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'Edit quick command', exact: true });
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await editor.getByRole('textbox', { name: 'Name', exact: true }).fill('QA greeting');
+	await editor.getByRole('textbox', { name: 'Command', exact: true }).fill('echo ${greeting}');
+	await editor.getByRole('textbox', { name: 'Tags', exact: true }).fill('QA');
+	await editor.getByRole('textbox', { name: 'greeting', exact: true }).fill('default');
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(editor).toHaveCount(0);
+	const row = panel.getByRole('button', { name: 'Run · QA greeting', exact: true });
+	await expect(row).toBeVisible();
+	await panel.getByRole('button', { name: 'Show names', exact: true }).click();
+	await expect(row).toHaveText('QA greeting');
+	await panel.getByRole('button', { name: 'Expand search', exact: true }).click();
+	const search = panel.getByRole('searchbox', { name: 'Search names, commands or tags', exact: true });
+	await search.fill('not-present');
+	await expect(row).toHaveCount(0);
+	await search.fill('greeting');
+	await expect(row).toBeVisible();
+	await search.press('ArrowDown');
+	await search.press('Enter');
+	const run = page.getByRole('dialog', { name: 'QA greeting', exact: true });
+	await expect(run.locator('.workspace-command-preview')).toHaveText('echo default');
+	const before = received();
+	await run.getByRole('contentinfo').getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(run).toHaveCount(0);
+	expect(received()).toBe(before);
+	await row.click();
+	await run.getByRole('textbox', { name: 'greeting', exact: true }).fill('qa-verified');
+	await expect(run.locator('.workspace-command-preview')).toHaveText('echo qa-verified');
+	await run.getByRole('button', { name: 'Run', exact: true }).click();
+	await expect(run).toHaveCount(0);
+	await expect.poll(received).toContain('echo qa-verified');
+	await expect
+		.poll(
+			async () =>
+				((await host.json(base + '/catalog')) as { commands: { name: string; usageCount: number }[] }).commands,
+		)
+		.toEqual([expect.objectContaining({ name: 'QA greeting', usageCount: 1 })]);
+	await row.click({ button: 'right' });
+	await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+	await editor.getByRole('textbox', { name: 'Name', exact: true }).fill('QA edited greeting');
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	const edited = panel.getByRole('button', { name: 'Run · QA edited greeting', exact: true });
+	await expect(edited).toBeVisible();
+	await edited.click({ button: 'right' });
+	await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+	const remove = page.getByRole('dialog', { name: 'Delete command', exact: true });
+	const deleted = page.waitForResponse(
+		(response) =>
+			response.request().method() === 'DELETE' && new URL(response.url()).pathname.includes('/catalog/commands/'),
+	);
+	await remove.getByRole('contentinfo').getByRole('button', { name: 'Delete', exact: true }).click();
+	const deletion = await deleted;
+	expect(deletion.status(), await deletion.text()).toBe(200);
+	expect(new URL(deletion.url()).searchParams.get('version')).toBe('2');
+	await expect(remove).toHaveCount(0);
+	await expect(edited).toHaveCount(0);
+	await expect
+		.poll(async () => ((await host.json(base + '/catalog')) as { commands: unknown[] }).commands)
+		.toEqual([]);
 }
 
 export async function verifyWorkspacePanels(page: Page, workspace: Locator, host: Host): Promise<void> {
@@ -208,8 +365,9 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	await historyButton.click();
 	await expect(folder).toBeVisible();
 	const toolbar = files.locator('.workspace-file-tools');
-	await expect(toolbar.getByRole('button')).toHaveCount(7);
+	await expect(toolbar.getByRole('button')).toHaveCount(8);
 	for (const name of [
+		'Upload files',
 		'Refresh directory',
 		'Search this folder and subfolders',
 		'Sort files',
@@ -500,6 +658,131 @@ export async function verifyTerminalSelection(workspace: Locator): Promise<void>
 	await workspace.getByRole('button', { name: 'Clear selection', exact: true }).click();
 }
 
+/** Operate on disposable remote files through the same controls a user sees. */
+export async function verifyFileMutations(page: Page, workspace: Locator, directory: string) {
+	const files = workspace.locator('.workspace-files');
+
+	const entry = (name: string) => files.getByRole('button', { name, exact: true });
+
+	const list = files.locator('.workspace-file-list');
+	await list.focus();
+	await list.press('Control+Shift+n');
+	const folder = page.getByRole('dialog', { name: 'New directory', exact: true });
+	await folder.getByRole('textbox', { name: 'Name', exact: true }).fill('qa-folder');
+	await folder.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(entry('qa-folder')).toBeVisible();
+	expect((await stat(join(directory, 'qa-folder'))).isDirectory()).toBe(true);
+	await entry('qa-folder').click();
+	await expect(entry('Parent directory')).toBeVisible();
+
+	await list.click({ button: 'right', position: { x: 20, y: 60 } });
+	await page.getByRole('menuitem', { name: 'New file', exact: true }).click();
+	const create = page.getByRole('dialog', { name: 'New file', exact: true });
+	await create.getByRole('textbox', { name: 'Name', exact: true }).fill('qa-file.txt');
+	await create.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(entry('qa-file.txt')).toBeVisible();
+	await entry('qa-file.txt').click();
+	await entry('qa-file.txt').press('F2');
+	const rename = page.getByRole('dialog', { name: 'Rename', exact: true });
+	await rename.getByRole('textbox', { name: 'Name', exact: true }).fill('renamed.txt');
+	await rename.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(entry('renamed.txt')).toBeVisible();
+	await entry('renamed.txt').click({ button: 'right' });
+	await page.getByRole('menuitem', { name: 'Permissions', exact: true }).click();
+	const permissions = page.getByRole('dialog', { name: 'Permissions', exact: true });
+	await permissions.getByRole('textbox', { name: 'Permissions (octal)', exact: true }).fill('600');
+	await permissions.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(permissions).toHaveCount(0);
+	expect((await stat(join(directory, 'qa-folder', 'renamed.txt'))).mode & 0o777).toBe(0o600);
+
+	await entry('renamed.txt').click();
+	await entry('renamed.txt').press('Delete');
+	const deletion = page.getByRole('dialog', { name: 'Delete', exact: true });
+	await expect(deletion).toBeVisible();
+	await deletion.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(entry('renamed.txt')).toBeVisible();
+	await entry('renamed.txt').press('Delete');
+	await deletion.getByRole('contentinfo').getByRole('button', { name: 'Delete', exact: true }).click();
+	await expect(entry('renamed.txt')).toHaveCount(0);
+	await expect(stat(join(directory, 'qa-folder', 'renamed.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+
+	// A same-name file must not be replaced before explicit confirmation.
+	const existing = join(directory, 'qa-folder', 'file.txt');
+	await writeFile(existing, 'existing bytes');
+	await entry('Parent directory').click();
+	await entry('file.txt').click();
+	await entry('file.txt').press('Control+c');
+	await entry('qa-folder').click();
+	await files.getByRole('button', { name: 'Refresh directory', exact: true }).click();
+	await expect(entry('file.txt')).toBeVisible();
+	await list.focus();
+	await list.press('Control+v');
+	const overwrite = page.getByRole('dialog', { name: 'Replace existing files?', exact: true });
+	await expect(overwrite).toBeVisible();
+	expect(await readFile(existing, 'utf8')).toBe('existing bytes');
+	await overwrite.getByRole('contentinfo').getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(overwrite).toHaveCount(0);
+	expect(await readFile(existing, 'utf8')).toBe('existing bytes');
+	await list.focus();
+	await list.press('Control+v');
+	await expect(overwrite).toBeVisible();
+	await overwrite.getByRole('button', { name: 'Continue', exact: true }).click();
+	await expect(overwrite).toHaveCount(0);
+	await expect.poll(() => readFile(existing, 'utf8')).toBe('example file');
+
+	await entry('Parent directory').click();
+	await expect(entry('qa-folder')).toBeVisible();
+	await expect(entry('file.txt')).toBeVisible();
+	await entry('qa-folder').click({ button: 'right' });
+	await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+	await expect(deletion).toBeVisible();
+	const removed = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname.endsWith('/files/remove') && response.request().method() === 'POST',
+	);
+	await deletion.getByRole('contentinfo').getByRole('button', { name: 'Delete', exact: true }).click();
+	const result = await removed;
+	expect(result.request().postDataJSON()).toEqual({ paths: ['/qa-folder'] });
+	expect(result.status(), await result.text()).toBe(204);
+	await expect(deletion).toHaveCount(0);
+	await expect(entry('qa-folder')).toHaveCount(0);
+	await expect(stat(join(directory, 'qa-folder'))).rejects.toMatchObject({ code: 'ENOENT' });
+	await expect(entry('file.txt')).toBeVisible();
+	expect(await readFile(join(directory, 'file.txt'), 'utf8')).toBe('example file');
+
+	// An explicit file picker is usable without drag and drop, including by keyboard.
+	const upload = files.getByRole('button', { name: 'Upload files', exact: true });
+	const chooser = page.waitForEvent('filechooser');
+	await upload.press('Enter');
+	await (
+		await chooser
+	).setFiles([
+		{ name: 'qa-upload.txt', mimeType: 'text/plain', buffer: Buffer.from('picker upload') },
+		{ name: 'qa-second.txt', mimeType: 'text/plain', buffer: Buffer.from('second upload') },
+	]);
+	await expect(entry('qa-upload.txt')).toBeVisible();
+	await expect(entry('qa-second.txt')).toBeVisible();
+	expect(await readFile(join(directory, 'qa-upload.txt'), 'utf8')).toBe('picker upload');
+	expect(await readFile(join(directory, 'qa-second.txt'), 'utf8')).toBe('second upload');
+
+	// Search, hidden-file toggle and return to the normal listing.
+	await writeFile(join(directory, '.qa-hidden'), 'hidden');
+	await files.getByRole('button', { name: 'Refresh directory', exact: true }).click();
+	await expect(entry('.qa-hidden')).toHaveCount(0);
+	await files.getByRole('button', { name: 'Show hidden files', exact: true }).click();
+	await expect(entry('.qa-hidden')).toBeVisible();
+	await files.getByRole('button', { name: 'Show hidden files', exact: true }).click();
+	await expect(entry('.qa-hidden')).toHaveCount(0);
+	await files.getByRole('button', { name: 'Search this folder and subfolders', exact: true }).click();
+	const search = files.getByRole('textbox', { name: 'Search this folder and subfolders', exact: true });
+	await search.fill('qa-upload');
+	await search.press('Enter');
+	await expect(entry('qa-upload.txt')).toBeVisible();
+	await expect(entry('qa-second.txt')).toHaveCount(0);
+	await files.getByRole('button', { name: 'Close search', exact: true }).click();
+	await expect(entry('qa-second.txt')).toBeVisible();
+}
+
 export async function verifyWorkspaceTransfers(
 	page: Page,
 	workspace: Locator,
@@ -533,7 +816,10 @@ export async function verifyWorkspaceTransfers(
 	await start('file.txt');
 	await center.getByRole('tab', { name: 'History', exact: true }).click();
 	await expect(
-		center.locator('.workspace-transfer-task[data-state="completed"]').filter({ hasText: 'file.txt' }),
+		center
+			.locator('.workspace-transfer-task[data-state="completed"]')
+			.filter({ hasText: 'file.txt' })
+			.filter({ hasText: 'Workspace transfer destination' }),
 	).toBeVisible();
 	expect(await readFile(join(fixture.directory, 'file.txt'), 'utf8')).toBe('example file');
 

@@ -11,7 +11,13 @@ export const BackgroundPresetWriteSchema = z.strictObject({
 	value: BackgroundPresetInputSchema,
 });
 
-export const BackgroundDeleteSchema = z.strictObject({ version: z.number().int().nonnegative() });
+export const BackgroundDeleteSchema = z.strictObject({
+	version: z
+		.string()
+		.regex(/^(0|[1-9]\d*)$/u)
+		.transform(Number)
+		.pipe(z.number().int().nonnegative().safe()),
+});
 
 export const BackgroundVersionHeaderSchema = z
 	.string()

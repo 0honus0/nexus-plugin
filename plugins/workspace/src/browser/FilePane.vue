@@ -87,6 +87,15 @@
 		context = ref<FileEntry>();
 	const syncing = ref<'toTerminal' | 'fromTerminal'>();
 
+	const uploadInput = ref<HTMLInputElement>();
+
+	function uploadSelected(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const chosen = Array.from(input.files ?? []);
+		input.value = '';
+		if (props.enabled && loaded.value && !busy.value && chosen.length) files.upload(chosen);
+	}
+
 	function displayName(entry: FileEntry) {
 		return 'relativePath' in entry ? String(entry.relativePath) : entry.name;
 	}
@@ -408,8 +417,18 @@
 </script>
 <template>
 	<section ref="surface" class="workspace-files" :aria-label="t('files')" tabindex="0" @keydown="shortcut">
+		<input ref="uploadInput" type="file" multiple hidden @change="uploadSelected" />
 		<div class="workspace-file-tools">
 			<template v-if="!searchExpanded">
+				<UiButton
+					appearance="ghost"
+					icon-only
+					:aria-label="t('upload')"
+					:title="t('upload')"
+					:disabled="!enabled || !loaded || busy"
+					@click="uploadInput?.click()"
+					><Upload :size="16"
+				/></UiButton>
 				<UiButton
 					appearance="ghost"
 					icon-only

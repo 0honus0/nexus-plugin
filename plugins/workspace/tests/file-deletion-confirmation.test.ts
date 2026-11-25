@@ -4,14 +4,30 @@ import type { PluginContextApi } from 'nexus-terminal/browser';
 import { FileEntrySchema } from '../src/shared/workspace-file-types';
 import { useFileOperations } from '../src/browser/files/use-file-operations';
 
-const { request, report, changed } = vi.hoisted(() => ({ request: vi.fn(), report: vi.fn(), changed: vi.fn() }));
+const { request, report, changed, clipboard, consumed } = vi.hoisted(() => ({
+	request: vi.fn(),
+	report: vi.fn(),
+	changed: vi.fn(),
+	clipboard: {
+		value: undefined as
+			undefined | { sourceSessionId: string; paths: string[]; operation: 'copy' | 'cut'; generation: string },
+	},
+	consumed: vi.fn(),
+}));
 vi.mock('../src/browser/workspace-client', () => ({ createWorkspaceClient: () => ({ request, report }) }));
 vi.mock('../src/browser/files/workspace-files-state', () => ({
-	useWorkspaceFilesState: () => ({ sessions: { value: [] }, connections: { value: [] }, changed }),
+	useWorkspaceFilesState: () => ({
+		sessions: { value: [] },
+		connections: { value: [] },
+		changed,
+		clipboard,
+		consumed,
+	}),
 }));
 
 afterEach(() => {
 	vi.resetAllMocks();
+	clipboard.value = undefined;
 });
 
 const file = FileEntrySchema.parse({
@@ -133,6 +149,48 @@ it('does not delete an empty selection', async () => {
 		await operations.open('remove', []);
 		expect(request).not.toHaveBeenCalled();
 		expect(operations.state.kind).toBeUndefined();
+	} finally {
+		scope.stop();
+	}
+});
+
+it('recognizes the host HTTP error code and only replaces an existing destination after confirmation', async () => {
+	const { operations, scope } = setup();
+	try {
+		clipboard.value = {
+			sourceSessionId: 'source',
+			paths: ['/note.txt'],
+			operation: 'copy',
+			generation: 'clipboard-1',
+		};
+		const conflict = Object.assign(new Error('WORKSPACE_FILE_EXISTS'), {
+			name: 'PluginHttpError',
+			status: 409,
+			code: 'WORKSPACE_FILE_EXISTS',
+		});
+		request.mockRejectedValueOnce(conflict);
+		await operations.paste('/target');
+		expect(operations.state.overwrite).toBe(true);
+		expect(request).toHaveBeenCalledTimes(1);
+		expect(report).not.toHaveBeenCalled();
+		expect(changed).not.toHaveBeenCalled();
+		expect(consumed).not.toHaveBeenCalled();
+		operations.close();
+		expect(operations.state.overwrite).toBe(false);
+		expect(request).toHaveBeenCalledTimes(1);
+
+		request.mockRejectedValueOnce(conflict);
+		await operations.paste('/target');
+		await operations.confirmOverwrite();
+		expect(request).toHaveBeenCalledTimes(3);
+		expect(request.mock.calls[2]?.[2]).toMatchObject({
+			sourceSessionId: 'source',
+			paths: ['/note.txt'],
+			destination: '/target',
+			overwrite: true,
+		});
+		expect(operations.state.overwrite).toBe(false);
+		expect(changed).toHaveBeenCalledTimes(1);
 	} finally {
 		scope.stop();
 	}

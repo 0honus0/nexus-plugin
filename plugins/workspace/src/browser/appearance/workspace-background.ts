@@ -107,16 +107,21 @@ export function createWorkspaceBackground(ctx: PluginContextApi, view: PluginWin
 	const removePreset = (item: BackgroundPreset) =>
 		mutate(() =>
 			client.request(
-				'appearance/presets/' + item.id,
+				'appearance/presets/' + item.id + '?' + new URLSearchParams({ version: String(item.version) }),
 				'DELETE',
-				{ version: item.version },
+				undefined,
 				BackgroundSnapshotSchema,
 			),
 		);
 
 	const removeImage = () =>
 		mutate(() =>
-			client.request('appearance/image', 'DELETE', { version: state.value.version }, BackgroundSnapshotSchema),
+			client.request(
+				'appearance/image?' + new URLSearchParams({ version: String(state.value.version) }),
+				'DELETE',
+				undefined,
+				BackgroundSnapshotSchema,
+			),
 		);
 
 	const upload = (file: File) =>

@@ -276,9 +276,35 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	await layout.click();
 	await page.getByRole('menuitem', { name: 'Edit layout', exact: true }).click();
 	await expect(workspace.locator('.dv-full-width-single-tab .workspace-pane-grip').first()).toBeVisible();
+	await expect(workspace.locator('.workspace-pane-grip').filter({ hasText: 'Terminal' })).toBeVisible();
+	await expect(workspace.locator('.workspace-layout-edit-bar')).toContainText('Drag handles to rearrange');
+	const grip = workspace.locator('.workspace-pane-grip').filter({ hasText: 'Server status' });
+	await expect(grip).toBeVisible();
+	const terminalPane = workspace.locator('.workspace-dock-anchor[data-pane="terminal"]');
+
+	const relativePosition = () =>
+		workspace.locator('.workspace-dock-anchor[data-pane="status"]').evaluate((element) => {
+			const terminal = element.closest('.workspace-dock')!.querySelector('[data-pane="terminal"]')!;
+			return element.getBoundingClientRect().left - terminal.getBoundingClientRect().left;
+		});
+
+	await expect.poll(relativePosition).toBeLessThan(0);
+	const source = (await grip.boundingBox())!;
+	const target = (await terminalPane.boundingBox())!;
+	await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+	await page.mouse.down();
+	try {
+		await page.mouse.move(target.x + target.width - 20, target.y + target.height / 2, { steps: 25 });
+	} finally {
+		await page.mouse.up();
+	}
+	await expect.poll(relativePosition).toBeGreaterThan(0);
 	await layout.click();
-	await page.getByRole('menuitem', { name: 'Finish editing', exact: true }).click();
+	await page.getByRole('menuitem', { name: 'Reset layout', exact: true }).click();
+	await expect.poll(relativePosition).toBeLessThan(0);
+	await workspace.getByRole('button', { name: 'Finish editing', exact: true }).click();
 	await expect(workspace.locator('.workspace-pane-grip')).toHaveCount(0);
+	await expect(workspace.locator('.workspace-layout-edit-bar')).toHaveCount(0);
 
 	const files = workspace.locator('.workspace-files');
 	const entry = files.getByRole('button', { name: 'file.txt', exact: true });

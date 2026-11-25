@@ -2,8 +2,8 @@
 	import { computed, ref, shallowReactive, type ComponentPublicInstance } from 'vue';
 	import { useResizeObserver } from '@vueuse/core';
 	import { DockviewVue } from 'dockview-vue';
-	import { GripHorizontal } from '@lucide/vue';
-	import { UiDialog, UiTransition } from 'nexus-terminal/browser/ui';
+	import { Check, GripHorizontal } from '@lucide/vue';
+	import { UiButton, UiDialog, UiTransition } from 'nexus-terminal/browser/ui';
 	import { createPresentationRegistry, type PresentationContext } from './presentation-registry';
 	import type { WorkspacePane } from '../../shared/workspace-layout-types';
 	import type { WorkspaceTool } from './presentation-types';
@@ -16,6 +16,7 @@
 		toolOpen,
 		navigation,
 		locked,
+		toggleLock,
 		ready,
 		resize,
 		resizeViewport,
@@ -65,6 +66,12 @@
 			:label="context.i18n.t('workspaceTools')"
 		/>
 		<div class="workspace-stage">
+			<div v-if="!locked" class="workspace-layout-edit-bar">
+				<p>{{ context.i18n.t('layoutEditing') }}</p>
+				<UiButton density="compact" tone="primary" @click="toggleLock">
+					<Check :size="15" />{{ context.i18n.t('lockLayout') }}
+				</UiButton>
+			</div>
 			<div v-if="context.transport.terminalClosed.value" class="workspace-layout-help">
 				{{ context.i18n.t('terminalEnded') }}
 			</div>
@@ -93,6 +100,7 @@
 								:title="context.i18n.t('moveRegion', { name: context.i18n.t(params.api.id) })"
 							>
 								<GripHorizontal :size="18" />
+								<span>{{ context.i18n.t(params.api.id) }}</span>
 							</div>
 						</UiTransition>
 					</template>

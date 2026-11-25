@@ -958,8 +958,15 @@ export async function verifyFileMutations(page: Page, workspace: Locator, direct
 	await expect(entry('.qa-hidden')).toHaveCount(0);
 	await files.getByRole('button', { name: 'Show hidden files', exact: true }).click();
 	await expect(entry('.qa-hidden')).toBeVisible();
+	await entry('.qa-hidden').click();
 	await files.getByRole('button', { name: 'Show hidden files', exact: true }).click();
 	await expect(entry('.qa-hidden')).toHaveCount(0);
+	// A range selection must not reuse an anchor that is no longer visible.
+	await entry('qa-upload.txt').click({ modifiers: ['Shift'] });
+	await expect(entry('qa-upload.txt')).toHaveAttribute('aria-pressed', 'true');
+	await expect(files.locator('.workspace-file-row[aria-pressed="true"]')).toHaveCount(1);
+	await entry('qa-second.txt').click({ modifiers: ['Shift'] });
+	await expect(files.locator('.workspace-file-row[aria-pressed="true"]')).toHaveCount(2);
 	await files.getByRole('button', { name: 'Search this folder and subfolders', exact: true }).click();
 	const search = files.getByRole('textbox', { name: 'Search this folder and subfolders', exact: true });
 	await search.fill('qa-upload');

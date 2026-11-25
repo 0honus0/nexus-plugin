@@ -159,6 +159,7 @@
 	watch(visibleRows, (value) => {
 		const available = new Set(value.map((entry) => entry.path));
 		selected.value = selected.value.filter((p) => available.has(p));
+		if (!available.has(anchor.value)) anchor.value = '';
 	});
 
 	function up() {
@@ -166,11 +167,15 @@
 	}
 
 	function select(entry: FileEntry, event?: MouseEvent) {
-		if (event?.shiftKey && anchor.value) {
+		if (event?.shiftKey) {
 			const keys = visibleRows.value.map((e) => e.path),
 				a = keys.indexOf(anchor.value),
 				b = keys.indexOf(entry.path);
-			selected.value = keys.slice(Math.min(Math.max(a, 0), b), Math.max(a, b) + 1);
+			if (a >= 0 && b >= 0) selected.value = keys.slice(Math.min(a, b), Math.max(a, b) + 1);
+			else {
+				selected.value = [entry.path];
+				anchor.value = entry.path;
+			}
 		} else if (event?.ctrlKey || event?.metaKey) {
 			selected.value = selectedPaths.value.has(entry.path)
 				? selected.value.filter((p) => p !== entry.path)

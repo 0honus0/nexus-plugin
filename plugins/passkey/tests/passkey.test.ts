@@ -1,7 +1,7 @@
 import { chromium, expect } from '@playwright/test';
 import { isoCBOR } from '@simplewebauthn/server/helpers';
 import { it } from 'vitest';
-import { manager as marketplaceManager, pluginFixture, startHost } from '../../test/tests/host.js';
+import { pluginFixture, reload, startHost } from '../../test/tests/host.js';
 import { PasskeyListSchema, PasskeyRegistrationFinishSchema } from '../src/shared/passkey-http-types.js';
 
 const id = '@nexus-terminal/passkey';
@@ -100,7 +100,7 @@ it.each([
 
 		const { items } = PasskeyListSchema.parse(await host.json(path + '/passkeys'));
 		expect(items).toEqual([expect.objectContaining({ name, origin: origin.origin })]);
-		await host.operation(marketplaceManager + '/reload', { pluginId: id });
+		await reload(host, id);
 
 		expect((await page.request.post(origin.origin + '/api/auth/logout', { data: {} })).ok()).toBe(true);
 		await page.goto(origin.href);

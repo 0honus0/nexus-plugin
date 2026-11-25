@@ -1,6 +1,6 @@
 import { chromium, expect } from '@playwright/test';
 import { it } from 'vitest';
-import { manager as marketplaceManager, pluginFixture, startHost } from '../../test/tests/host.js';
+import { pluginFixture, reload, startHost } from '../../test/tests/host.js';
 import { collectBrowserErrors, expectFormFields } from '../../test/tests/browser-checks.js';
 import {
 	OidcBindingAuthorizationSchema,
@@ -138,7 +138,7 @@ it('binds an account before configuration and accepts only a valid signature for
 	const saved = await host.json(path + '/configuration');
 	expect(saved).not.toHaveProperty('config.clientSecret');
 	expect(OidcStatusSchema.parse(saved).config?.subject).toBe(provider.ownerSubject);
-	await host.operation(marketplaceManager + '/reload', { pluginId: id });
+	await reload(host, id);
 
 	expect((await page.request.post(host.origin + '/api/auth/logout', { data: {} })).ok()).toBe(true);
 	await page.goto(host.origin);

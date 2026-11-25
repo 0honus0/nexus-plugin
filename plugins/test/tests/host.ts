@@ -251,6 +251,15 @@ export async function startHost(
 	return { origin, fixtureToken, request, json, operation, logs, container };
 }
 
+async function runtimeImpactRevision(host: Awaited<ReturnType<typeof startHost>>, id: string): Promise<string> {
+	const endpoint = manager + '/plugins/' + encodeURIComponent(id) + '/runtime-impact';
+	return z.object({ revision: z.hash('sha256') }).parse(await host.json(endpoint)).revision;
+}
+
+export async function reload(host: Awaited<ReturnType<typeof startHost>>, id: string): Promise<void> {
+	await host.operation(manager + '/reload', { pluginId: id, impactRevision: await runtimeImpactRevision(host, id) });
+}
+
 export async function setEnabled(
 	host: Awaited<ReturnType<typeof startHost>>,
 	id: string,
@@ -261,8 +270,7 @@ export async function setEnabled(
 		await host.operation(endpoint, { enabled: true }, 'PATCH');
 		return;
 	}
-	const { revision } = z.object({ revision: z.hash('sha256') }).parse(await host.json(endpoint + '/runtime-impact'));
-	await host.operation(endpoint, { enabled: false, impactRevision: revision }, 'PATCH');
+	await host.operation(endpoint, { enabled: false, impactRevision: await runtimeImpactRevision(host, id) }, 'PATCH');
 }
 
 export async function uninstall(host: Awaited<ReturnType<typeof startHost>>, id: string): Promise<void> {

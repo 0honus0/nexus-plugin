@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -186,7 +186,12 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 		await extract.getByRole('textbox', { name: 'Destination directory', exact: true }).fill(directory + '/output');
 		await extract.getByRole('button', { name: 'Save', exact: true }).click();
 		await browserExpect(extract).toHaveCount(0);
+		await workspace.getByRole('button', { name: 'Transfers', exact: true }).click();
+		await center.getByRole('tab', { name: 'History', exact: true }).click();
+		await browserExpect(completedArchives).toHaveCount(3);
+		await center.getByRole('button', { name: 'Collapse', exact: true }).click();
 		await file('output').click();
+		await browserExpect(path).toHaveValue(directory + '/output');
 		await browserExpect(file('source.txt')).toBeVisible({ timeout: 15000 });
 		expect((await docker('cat', directory + '/output/source.txt')).stdout).toBe('native archive bytes');
 
@@ -214,13 +219,19 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 		await replace.check();
 		await extract.getByRole('button', { name: 'Save', exact: true }).click();
 		await browserExpect(extract).toHaveCount(0);
-		await expect
-			.poll(async () => (await docker('cat', directory + '/output/source.txt')).stdout)
-			.toBe('native archive bytes');
+		await workspace.getByRole('button', { name: 'Transfers', exact: true }).click();
+		await center.getByRole('tab', { name: 'History', exact: true }).click();
+		await browserExpect(completedArchives).toHaveCount(4);
+		await center.getByRole('button', { name: 'Collapse', exact: true }).click();
+		expect((await docker('cat', directory + '/output/source.txt')).stdout).toBe('native archive bytes');
 		await file('output').click();
+		await browserExpect(path).toHaveValue(directory + '/output');
 		await browserExpect(file('source.txt')).toBeVisible();
 
 		await file('source.txt').click({ button: 'right' });
+		const downloadHead = page.waitForResponse(
+			(response) => response.request().method() === 'HEAD' && new URL(response.url()).pathname.endsWith('/file'),
+		);
 		const downloadEvent = page.waitForEvent('download');
 		await page.getByRole('menuitem', { name: 'Download file', exact: true }).click();
 		const download = await downloadEvent;
@@ -241,6 +252,52 @@ it.skipIf(!process.env.NEXUS_TEST_NATIVE_IMAGE)(
 		await browserExpect(
 			center.locator('.workspace-transfer-task[data-state="completed"]').filter({ hasText: 'source.txt' }),
 		).toBeVisible();
+		await center.getByRole('button', { name: 'Collapse', exact: true }).click();
+
+		// A multi-window native SFTP read must complete both the HTTP body and the transfer history.
+		const largeName = 'large-download.bin';
+		const largePath = directory + '/output/' + largeName;
+		const largeSize = 64 * 1024 * 1024;
+		await docker('dd', 'if=/dev/urandom', 'of=' + largePath, 'bs=1048576', 'count=64');
+		const largeHash = (await docker('sha256sum', largePath)).stdout.split(' ')[0];
+		await files.getByRole('button', { name: 'Refresh directory', exact: true }).click();
+		await browserExpect(file(largeName)).toBeVisible();
+		const largeUrl = new URL((await downloadHead).url());
+		largeUrl.search = '';
+		largeUrl.searchParams.set('path', largePath);
+		const received = await page.evaluate(async (url) => {
+			const response = await fetch(url);
+			const bytes = await response.arrayBuffer();
+			const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
+				byte.toString(16).padStart(2, '0'),
+			).join('');
+			return { status: response.status, size: bytes.byteLength, hash };
+		}, largeUrl.toString());
+		expect(received).toEqual({ status: 200, size: largeSize, hash: largeHash });
+		if (!process.env.NEXUS_TEST_CDP) {
+			await file(largeName).click({ button: 'right' });
+			const event = page.waitForEvent('download');
+			await page.getByRole('menuitem', { name: 'Download file', exact: true }).click();
+			const artifact = await event;
+			expect(artifact.suggestedFilename()).toBe(largeName);
+			const local = await mkdtemp(join(tmpdir(), 'nexus-large-download-'));
+			try {
+				const destination = join(local, largeName);
+				await artifact.saveAs(destination);
+				const bytes = await readFile(destination);
+				expect(bytes.length).toBe(largeSize);
+				expect(createHash('sha256').update(bytes).digest('hex')).toBe(largeHash);
+			} finally {
+				await rm(local, { recursive: true, force: true });
+			}
+		}
+		await workspace.getByRole('button', { name: 'Transfers', exact: true }).click();
+		await center.getByRole('tab', { name: 'History', exact: true }).click();
+		const largeHistory = center.locator('.workspace-transfer-task').filter({ hasText: largeName });
+		await browserExpect(largeHistory).toHaveCount(process.env.NEXUS_TEST_CDP ? 1 : 2);
+		await browserExpect(largeHistory.and(center.locator('[data-state="completed"]'))).toHaveCount(
+			process.env.NEXUS_TEST_CDP ? 1 : 2,
+		);
 		await center.getByRole('button', { name: 'Collapse', exact: true }).click();
 
 		// Both directions must observe the actual interactive shell, not an exec-channel cwd.

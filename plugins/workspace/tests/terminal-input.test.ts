@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { effectScope, ref } from 'vue';
+import { createCommandTargets } from '../src/browser/commands/command-targets';
 import { createTerminalInput } from '../src/browser/terminal/terminal-input';
 import { encodeTerminalKey } from '../src/browser/terminal/terminal-keys';
 import { presentationProfiles } from '../src/browser/presentation/presentation-defaults';
@@ -66,4 +67,26 @@ it('notifies prediction only for accepted input and marks commands as non-predic
 	input.send('not-observed');
 	expect(sent).toHaveBeenCalledTimes(2);
 	scope.stop();
+});
+
+it('counts a quick command only when the transport accepts it', () => {
+	const scope = effectScope();
+	const send = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+	const input = scope.run(() =>
+		createTerminalInput({ send, connected: ref(true), terminalClosed: ref(false) } as unknown as SessionTransport),
+	)!;
+	try {
+		const targets = createCommandTargets();
+		targets.register('one', {
+			name: 'One',
+
+			ready: () => true,
+
+			input,
+		});
+		expect(targets.send(['one'], 'fixture')).toBe(0);
+		expect(targets.send(['one'], 'fixture')).toBe(1);
+	} finally {
+		scope.stop();
+	}
 });

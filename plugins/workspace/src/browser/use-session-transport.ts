@@ -5,9 +5,11 @@ import { TerminalControlSchema } from '../shared/workspace-types';
 type Output = z.infer<typeof TerminalControlSchema> | { type: 'output'; data: Uint8Array };
 
 /** The connection tab owns its attachment. Switching terminal/files never detaches SSH. */
-export function useSessionTransport(ctx: PluginContextApi, id: string, signal: AbortSignal) {
+export function useSessionTransport(ctx: PluginContextApi, id: string, viewSignal: AbortSignal) {
+	const lifetime = new AbortController();
+	const signal = AbortSignal.any([viewSignal, ctx.signal, lifetime.signal]);
 	const connected = ref(false),
-		connecting = ref(true),
+		connecting = ref(!signal.aborted),
 		terminalClosed = ref(false);
 	const listeners = new Set<(message: Output) => void>();
 	let stream: ReturnType<typeof ctx.app.ws.connect> | undefined;
@@ -26,6 +28,7 @@ export function useSessionTransport(ctx: PluginContextApi, id: string, signal: A
 			},
 
 			onConnected(socket) {
+				if (signal.aborted) return;
 				socket.binaryType = 'arraybuffer';
 			},
 
@@ -35,6 +38,7 @@ export function useSessionTransport(ctx: PluginContextApi, id: string, signal: A
 			},
 
 			onMessage(_socket, event) {
+				if (signal.aborted) return;
 				let message: Output;
 				try {
 					message =
@@ -55,7 +59,14 @@ export function useSessionTransport(ctx: PluginContextApi, id: string, signal: A
 		});
 	}
 
+	function reset() {
+		connected.value = false;
+		connecting.value = false;
+	}
+
+	signal.addEventListener('abort', reset, { once: true });
 	onScopeDispose(() => {
+		lifetime.abort();
 		close();
 		listeners.clear();
 	});
@@ -70,6 +81,7 @@ export function useSessionTransport(ctx: PluginContextApi, id: string, signal: A
 		},
 
 		subscribe(listener: (message: Output) => void) {
+			if (signal.aborted) return () => {};
 			listeners.add(listener);
 			// Attach only after the terminal consumer is listening: dock anchors mount asynchronously.
 			connect();

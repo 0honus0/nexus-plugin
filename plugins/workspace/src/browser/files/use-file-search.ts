@@ -16,6 +16,8 @@ export function useFileSearch(ctx: PluginContextApi, sessionId: string, path: Re
 		revision++;
 		controller?.abort();
 		searching.value = false;
+		entries.value = undefined;
+		truncated.value = false;
 	}
 
 	async function search() {
@@ -59,8 +61,6 @@ export function useFileSearch(ctx: PluginContextApi, sessionId: string, path: Re
 			invalidate();
 			timer.stop();
 			// Results belong to the previous query, not the text being edited.
-			entries.value = undefined;
-			truncated.value = false;
 			if (query.value.trim() && !signal.aborted && !ctx.signal.aborted) {
 				searching.value = true;
 				timer.start();
@@ -69,11 +69,15 @@ export function useFileSearch(ctx: PluginContextApi, sessionId: string, path: Re
 		{ flush: 'sync' },
 	);
 
-	watch(path, () => {
-		query.value = '';
-		entries.value = undefined;
-		invalidate();
-	});
+	watch(
+		path,
+		() => {
+			query.value = '';
+			timer.stop();
+			invalidate();
+		},
+		{ flush: 'sync' },
+	);
 	onScopeDispose(() => {
 		timer.stop();
 		invalidate();

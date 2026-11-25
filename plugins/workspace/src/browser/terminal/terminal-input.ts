@@ -13,12 +13,13 @@ export function createTerminalInput(transport: SessionTransport) {
 	const listeners = new Set<(data: string, predict: boolean) => void>();
 
 	function send(data: string, predict = true) {
-		if (!transport.connected.value || transport.terminalClosed.value) return;
+		if (!transport.connected.value || transport.terminalClosed.value) return false;
 		const modified = applyTerminalModifiers(data, modifiers.active.value);
 		const value = modified ?? data;
-		if (!transport.send({ type: 'input', data: value })) return;
+		if (!transport.send({ type: 'input', data: value })) return false;
 		if (modified !== null) modifiers.consume();
 		for (const listener of listeners) listener(value, predict);
+		return true;
 	}
 
 	onScopeDispose(() => {
@@ -30,9 +31,7 @@ export function createTerminalInput(transport: SessionTransport) {
 		modifiers,
 		send,
 
-		command: (data: string) => {
-			send(data.replace(/\r?\n/g, '\r') + '\r', false);
-		},
+		command: (data: string) => send(data.replace(/\r?\n/g, '\r') + '\r', false),
 
 		key: (key: TerminalKey) => send(encodeTerminalKey(key, { applicationCursorKeys: cursorMode() })),
 

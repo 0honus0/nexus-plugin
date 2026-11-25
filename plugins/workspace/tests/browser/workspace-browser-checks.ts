@@ -800,9 +800,29 @@ export async function verifyFileMutations(page: Page, workspace: Locator, direct
 	await query.fill('file.txt');
 	await expect(entry('file.txt')).toBeVisible();
 	await expect(list).toHaveAttribute('aria-busy', 'false');
+	const searchRequests = '**/files/search?*';
+	const refreshSearchStarted = Promise.withResolvers<void>();
+	const releaseSearchRefresh = Promise.withResolvers<void>();
+	await page.route(searchRequests, async (route) => {
+		if (new URL(route.request().url()).searchParams.get('query') === 'file.txt') {
+			refreshSearchStarted.resolve();
+			await releaseSearchRefresh.promise;
+		}
+		await route.continue();
+	});
+	try {
+		await query.press('Enter');
+		await refreshSearchStarted.promise;
+		await expect(list).toHaveAttribute('aria-busy', 'true');
+		await expect(list.locator('.workspace-file-row')).toHaveCount(0);
+	} finally {
+		releaseSearchRefresh.resolve();
+		await page.unroute(searchRequests);
+	}
+	await expect(entry('file.txt')).toBeVisible();
+	await expect(list).toHaveAttribute('aria-busy', 'false');
 	const searchStarted = Promise.withResolvers<void>();
 	const releaseSearch = Promise.withResolvers<void>();
-	const searchRequests = '**/files/search?*';
 	await page.route(searchRequests, async (route) => {
 		if (new URL(route.request().url()).searchParams.get('query') === 'qa-no-matching-file') {
 			searchStarted.resolve();

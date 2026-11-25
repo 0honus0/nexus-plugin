@@ -23,10 +23,7 @@ export function createCommandTargets() {
 			let count = 0;
 			for (const id of ids) {
 				const target = targets.get(id);
-				if (target?.ready()) {
-					target.input.command(command);
-					count++;
-				}
+				if (target?.ready() && target.input.command(command)) count++;
 			}
 			return count;
 		},

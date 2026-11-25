@@ -56,3 +56,37 @@ it('invalidates displayed results immediately when the search text changes and i
 		vi.useRealTimers();
 	}
 });
+
+it('invalidates results when refreshing the same query and never retains them after a failed refresh', async () => {
+	const scope = effectScope();
+	const signal = new AbortController().signal;
+	const json = vi.fn();
+	const report = vi.fn();
+	const path = ref('/');
+	const search = scope.run(() =>
+		useFileSearch(
+			{ signal, app: { http: { json }, log: { report } } } as unknown as PluginContextApi,
+			'fixture',
+			path,
+			signal,
+		),
+	)!;
+	try {
+		json.mockResolvedValueOnce(result('old.txt', true));
+		search.query.value = 'txt';
+		await search.search();
+		const refresh = Promise.withResolvers<FileSearchResult>();
+		json.mockReturnValueOnce(refresh.promise);
+		const pending = search.search();
+		expect(search.searching.value).toBe(true);
+		expect(search.entries.value).toBeUndefined();
+		expect(search.truncated.value).toBe(false);
+		refresh.reject(new Error('fixture refresh failed'));
+		await pending;
+		expect(search.searching.value).toBe(false);
+		expect(search.entries.value).toBeUndefined();
+		expect(report).toHaveBeenCalledOnce();
+	} finally {
+		scope.stop();
+	}
+});

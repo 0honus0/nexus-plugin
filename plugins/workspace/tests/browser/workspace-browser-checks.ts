@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { startHost } from '../../../test/tests/host.js';
 import { BackgroundSnapshotSchema } from '../../src/shared/workspace-background-types.js';
+import { WorkspaceLayoutResponseSchema } from '../../src/shared/workspace-layout-types.js';
+import { dockStructure } from '../../src/browser/presentation/dock-layout.js';
 import { WorkspacePathHistorySchema } from '../../src/shared/workspace-path-history-types.js';
 import { TransferTaskSchema } from '../../src/shared/workspace-transfer-types.js';
 import { SessionListResponseSchema } from '../../src/shared/workspace-types.js';
@@ -278,6 +280,67 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	await expect(workspace.locator('.dv-full-width-single-tab .workspace-pane-grip').first()).toBeVisible();
 	await expect(workspace.locator('.workspace-pane-grip').filter({ hasText: 'Terminal' })).toBeVisible();
 	await expect(workspace.locator('.workspace-layout-edit-bar')).toContainText('Drag handles to rearrange');
+	const terminalGrip = workspace.locator('.workspace-pane-grip').filter({ hasText: 'Terminal' });
+	const preview = workspace.locator('.dv-drop-target-selection:visible');
+	const panes = workspace.locator('.workspace-dock-anchor');
+
+	// Compare topology, not transient pixel sizes: editor activation also reflows pane minima.
+	const geometry = () =>
+		panes.evaluateAll((elements) => {
+			const rects = elements
+				.map((element) => ({ id: element.getAttribute('data-pane')!, rect: element.getBoundingClientRect() }))
+				.sort((a, b) => a.id.localeCompare(b.id));
+			return rects.flatMap((a, index) =>
+				rects
+					.slice(index + 1)
+					.map((b) => [a.id, b.id, Math.sign(a.rect.x - b.rect.x), Math.sign(a.rect.y - b.rect.y)]),
+			);
+		});
+
+	const original = await geometry();
+	for (const [pane, fraction] of [
+		['terminal', 0.1],
+		['files', 0.5],
+	] as const) {
+		const source = (await terminalGrip.boundingBox())!;
+		const target = (await workspace.locator(`.workspace-dock-anchor[data-pane="${pane}"]`).boundingBox())!;
+		await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+		await page.mouse.down();
+		try {
+			await page.mouse.move(target.x + target.width * fraction, target.y + target.height / 2, { steps: 25 });
+			await expect(preview).toHaveCount(0);
+		} finally {
+			await page.mouse.up();
+		}
+		await expect.poll(geometry).toEqual(original);
+	}
+	// The terminal itself must move for a valid half-pane preview.
+	const profile = await workspace.locator('.workspace-surface').getAttribute('data-profile');
+	const layoutPath = base + '/layouts/' + profile;
+	const saved = page.waitForResponse(
+		(response) => new URL(response.url()).pathname === layoutPath && response.request().method() === 'PUT',
+	);
+	const sourceTerminal = (await terminalGrip.boundingBox())!;
+	const targetFiles = (await workspace.locator('.workspace-dock-anchor[data-pane="files"]').boundingBox())!;
+	await page.mouse.move(sourceTerminal.x + sourceTerminal.width / 2, sourceTerminal.y + sourceTerminal.height / 2);
+	await page.mouse.down();
+	try {
+		await page.mouse.move(targetFiles.x + targetFiles.width * 0.1, targetFiles.y + targetFiles.height / 2, {
+			steps: 25,
+		});
+		await expect(preview).toHaveCount(1);
+	} finally {
+		await page.mouse.up();
+	}
+	await expect.poll(geometry).not.toEqual(original);
+	const savedResponse = await saved;
+	expect(savedResponse.status()).toBe(204);
+	const written = WorkspaceLayoutResponseSchema.parse({ layout: savedResponse.request().postDataJSON() }).layout!;
+	const readBack = WorkspaceLayoutResponseSchema.parse(await host.json(layoutPath)).layout!;
+	expect(dockStructure(readBack.dock, readBack.tools)).toBe(dockStructure(written.dock, written.tools));
+	await layout.click();
+	await page.getByRole('menuitem', { name: 'Reset layout', exact: true }).click();
+
 	const grip = workspace.locator('.workspace-pane-grip').filter({ hasText: 'Server status' });
 	await expect(grip).toBeVisible();
 	const terminalPane = workspace.locator('.workspace-dock-anchor[data-pane="terminal"]');

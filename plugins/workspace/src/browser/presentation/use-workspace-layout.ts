@@ -3,7 +3,7 @@ import { paneSizes } from './pane-sizes';
 import { presentationProfiles } from './presentation-defaults';
 import type { PresentationProfile } from './presentation-types';
 import { ref, shallowRef, watch, onScopeDispose, computed, reactive, inject, provide } from 'vue';
-import type { DockviewApi, DockviewReadyEvent } from 'dockview-vue';
+import type { DockviewApi, DockviewReadyEvent, DockviewWillDropEvent } from 'dockview-vue';
 import type { PluginContextApi } from 'nexus-terminal/browser';
 import type { PluginWindowApi } from 'nexus-terminal/browser';
 import { resolveLayoutProfile } from '../layout-profile.js';
@@ -269,12 +269,24 @@ export function useWorkspaceLayout(props: {
 				group.header.hidden = locked.value;
 			}),
 		);
-		subscriptions.push(
-			event.api.onWillDrop((event) => {
-				if (locked.value || event.position === 'center' || event.getData()?.viewId !== api.value?.id)
-					event.preventDefault();
-			}),
-		);
+
+		// Preview and commit must agree: only a split into a different group (or
+		// the outer grid edge) can rearrange our single-pane groups.
+		const validateDrop = (
+			drop: Pick<DockviewWillDropEvent, 'position' | 'group' | 'getData' | 'preventDefault'>,
+		) => {
+			const source = drop.getData();
+			if (
+				locked.value ||
+				drop.position === 'center' ||
+				!source ||
+				source.viewId !== event.api.id ||
+				source.groupId === drop.group?.id
+			)
+				drop.preventDefault();
+		};
+
+		subscriptions.push(event.api.onWillShowOverlay(validateDrop), event.api.onWillDrop(validateDrop));
 		subscriptions.push(
 			event.api.onDidLayoutChange(({ reasons }) => {
 				if (applyingConstraints) return;

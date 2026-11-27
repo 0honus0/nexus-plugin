@@ -1,0 +1,37 @@
+{
+  "name": "@nexus-terminal/file-manager",
+  "version": "0.0.1-dev.6",
+  "type": "module",
+  "displayName": "File Manager",
+  "description": "Browse and transfer files on saved SSH connections",
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "nexus-terminal": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=26.13.1"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-plugin.mjs",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "pnpm build"
+  },
+  "nexus": {
+    "kind": "application",
+    "icon": "folder-open",
+    "entry": {
+      "frontend": "dist/browser/index.js"
+    },
+    "dependsOn": {
+      "@nexus-terminal/workspace": "^0.0.1-dev.29"
+    },
+    "i18n": {
+      "zh-CN": {
+        "displayName": "文件管理器",
+        "description": "浏览和传输已保存 SSH 连接上的文件"
+      }
+    }
+  }
+}

@@ -286,8 +286,9 @@ export class WorkspaceService {
 			const serialize = new SerializeAddon();
 			serialize.activate(terminal as unknown as BrowserTerminal);
 			const remote = this.remoteTools.bind(connection, sessionScope);
+			const serverIdentity = JSON.stringify([config.host.toLowerCase(), config.port, observed, auth.username]);
 			const s: Session = {
-				serverIdentity: JSON.stringify([config.host.toLowerCase(), config.port, observed, auth.username]),
+				serverIdentity,
 				endpoint: {
 					host: config.host,
 					port: config.port,
@@ -319,10 +320,14 @@ export class WorkspaceService {
 				scope: sessionScope,
 				directory: createWorkspaceDirectory(remote, channel),
 				status: createWorkspaceStatus(remote, this.log),
-				files: createWorkspaceFiles(connection, (count) => {
-					s.info.transfers = count;
-					this.#changed();
-				}),
+				files: createWorkspaceFiles(
+					connection,
+					(count) => {
+						s.info.transfers = count;
+						this.#changed();
+					},
+					serverIdentity,
+				),
 			};
 			this.#sessions.set(s.info.id, s);
 			sessionId = s.info.id;

@@ -1,12 +1,16 @@
 {
   "name": "@nexus-terminal/workspace",
-  "version": "0.0.1-dev.7",
+  "version": "0.0.1-dev.29",
   "type": "module",
   "description": "SSH terminals, files, server status and quick commands",
   "files": [
     "dist"
   ],
-  "exports": {},
+  "exports": {
+    "./file-manager-api": {
+      "types": "./dist/types/browser/file-manager-api.d.ts"
+    }
+  },
   "scripts": {
     "build": "node ../../scripts/build-plugin.mjs",
     "typecheck": "vue-tsc --noEmit",

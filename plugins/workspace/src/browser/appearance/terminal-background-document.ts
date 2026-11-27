@@ -9,9 +9,10 @@ const createBackgroundRuntime = (frameIntervalMs: number, motion: boolean) => `<
   const pausedStyle = document.createElement('style');
   document.head.appendChild(pausedStyle);
   let nextId = 0, timer = null, frame = null, deadline = null, lastFrame = 0, generation = 0;
-  let visible = true, painted = false;
+  let visible = true, paintedFrames = 0;
   let width = -1, height = -1;
-  const paused = () => !visible || document.hidden || ((!motionEnabled || reducedMotion.matches) && painted);
+  const staticFrameTarget = 24;
+  const paused = () => !visible || document.hidden || ((!motionEnabled || reducedMotion.matches) && paintedFrames >= staticFrameTarget);
   const clearSchedule = () => {
     generation++;
     if (timer !== null) window.clearTimeout(timer);
@@ -38,7 +39,7 @@ const createBackgroundRuntime = (frameIntervalMs: number, motion: boolean) => `<
           try { callback(timestamp); }
           catch (error) { window.setTimeout(() => { throw error; }, 0); }
         }
-        painted = true;
+        paintedFrames++;
         if (paused()) clearSchedule();
         else schedule();
       };
@@ -79,7 +80,7 @@ const createBackgroundRuntime = (frameIntervalMs: number, motion: boolean) => `<
     width = nextWidth; height = nextHeight;
     window.dispatchEvent(new Event('resize'));
   };
-  const restore = () => { width = height = -1; painted = false; syncGeometry(); sync(); };
+  const restore = () => { width = height = -1; paintedFrames = 0; syncGeometry(); sync(); };
   document.addEventListener('DOMContentLoaded', () => {
     const observer = new ResizeObserver(syncGeometry);
     observer.observe(document.documentElement);
@@ -87,7 +88,7 @@ const createBackgroundRuntime = (frameIntervalMs: number, motion: boolean) => `<
   }, { once: true });
   window.addEventListener('message', event => {
     if (event.source !== window.parent || event.data?.type !== 'nexus-background-geometry' || typeof event.data.visible !== 'boolean') return;
-    if (event.data.visible && !visible) painted = false;
+    if (event.data.visible && !visible) paintedFrames = 0;
     visible = event.data.visible;
     if (typeof event.data.motion === 'boolean') motionEnabled = event.data.motion;
     syncGeometry();
@@ -96,9 +97,9 @@ const createBackgroundRuntime = (frameIntervalMs: number, motion: boolean) => `<
   document.addEventListener('visibilitychange', restore);
   window.addEventListener('pageshow', restore);
   window.addEventListener('pagehide', clearSchedule);
-  // Resizing a canvas clears its pixels. Reduced motion still needs one new
-  // static frame after resize, rather than permanently freezing an empty canvas.
-  window.addEventListener('resize', () => { painted = false; sync(); });
+  // Resizing a canvas clears its pixels. Reduced motion still needs new
+  // static frames after resize, rather than permanently freezing an empty canvas.
+  window.addEventListener('resize', () => { paintedFrames = 0; sync(); });
   reducedMotion.addEventListener('change', sync);
   sync();
 })();<\/script>`;

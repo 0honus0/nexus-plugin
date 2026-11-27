@@ -266,7 +266,14 @@
 		:aria-label="t('tools.commands')"
 		:class="{ 'is-compact': compact }"
 	>
-		<header class="workspace-quick-controls" @focusout="blurSearch" @click="closeSearchAfterAction">
+		<header
+			class="workspace-quick-controls workspace-panel-bar"
+			@focusout="blurSearch"
+			@click="closeSearchAfterAction"
+		>
+			<strong v-if="!searchExpanded" class="workspace-quick-title" :title="t('tools.commands')">{{
+				t('tools.commands')
+			}}</strong>
 			<UiButton
 				v-if="!searchExpanded"
 				class="workspace-quick-search-toggle"
@@ -299,33 +306,37 @@
 					></template>
 				</UiInput>
 			</div>
+			<div class="workspace-tool-group">
+				<UiButton
+					appearance="ghost"
+					icon-only
+					:aria-label="t('tools.sort') + ' · ' + sortLabel"
+					:title="sortLabel"
+					@click="cycleSort"
+					><component :is="sortIcon" :size="15"
+				/></UiButton>
+				<UiButton
+					appearance="ghost"
+					icon-only
+					:aria-label="t('tools.compactMode')"
+					:title="t('tools.compactMode')"
+					:aria-pressed="compact"
+					@click="compact = !compact"
+					><component :is="compact ? Minimize2 : Maximize2" :size="15"
+				/></UiButton>
+				<UiButton
+					appearance="ghost"
+					icon-only
+					:aria-label="t(displayMode === 'name' ? 'tools.showCommand' : 'tools.showName')"
+					:title="t(displayMode === 'name' ? 'tools.showCommand' : 'tools.showName')"
+					@click="displayMode = displayMode === 'name' ? 'command' : 'name'"
+					><component :is="displayMode === 'name' ? Tags : Terminal" :size="15"
+				/></UiButton>
+			</div>
 			<UiButton
-				appearance="ghost"
-				icon-only
-				:aria-label="t('tools.sort') + ' · ' + sortLabel"
-				:title="sortLabel"
-				@click="cycleSort"
-				><component :is="sortIcon" :size="15"
-			/></UiButton>
-			<UiButton
-				appearance="ghost"
-				icon-only
-				:aria-label="t('tools.compactMode')"
-				:title="t('tools.compactMode')"
-				:aria-pressed="compact"
-				@click="compact = !compact"
-				><component :is="compact ? Minimize2 : Maximize2" :size="15"
-			/></UiButton>
-			<UiButton
-				appearance="ghost"
-				icon-only
-				:aria-label="t(displayMode === 'name' ? 'tools.showCommand' : 'tools.showName')"
-				:title="t(displayMode === 'name' ? 'tools.showCommand' : 'tools.showName')"
-				@click="displayMode = displayMode === 'name' ? 'command' : 'name'"
-				><component :is="displayMode === 'name' ? Tags : Terminal" :size="15"
-			/></UiButton>
-			<UiButton
-				appearance="ghost"
+				class="workspace-panel-primary"
+				appearance="soft"
+				tone="primary"
 				icon-only
 				:aria-label="t('tools.newCommand')"
 				:title="t('tools.newCommand')"
@@ -371,6 +382,7 @@
 				</div>
 			</section>
 			<UiEmptyState
+				class="workspace-panel-empty"
 				v-if="!groups.length && catalog.loaded.value"
 				:title="t(search ? 'tools.noResults' : 'tools.noCommands')"
 				:icon="Terminal"
@@ -481,45 +493,42 @@
 		flex: none;
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 4px;
-		padding: 6px;
-		border-bottom: 1px solid var(--ui-border);
+		gap: 5px;
+	}
+	.workspace-quick-title {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		font-size: 12px;
+		font-weight: 650;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.workspace-quick-search {
 		display: flex;
 		flex: 1;
 		min-width: 0;
-		width: 0;
 	}
 	.workspace-quick-search :deep(.ui-input) {
+		--ui-control-height: var(--workspace-control-height);
+		--ui-control-radius: var(--workspace-control-radius);
+		--ui-input-font-size: 13px;
+		--ui-control-gap: 5px;
+		--ui-control-padding-inline: 7px;
 		flex: 1;
-		gap: 4px;
-		height: 28px;
-		min-height: 28px;
-		padding: 4px 8px;
-		font-size: 11px;
+		min-width: 0;
 	}
-	.workspace-quick-controls :deep(input) {
-		font-size: 12px;
-		padding-block: 3px;
-	}
-	.workspace-quick-controls > .ui-button {
-		flex: none;
-		--ui-button-height: 28px;
-		min-width: 28px;
-		width: 28px;
-		padding: 5px;
-	}
-	.workspace-quick-controls [aria-pressed='true'] {
-		color: var(--ui-primary);
-		background: color-mix(in srgb, var(--ui-primary) 10%, transparent);
-	}
-	.workspace-quick-clear {
+	.workspace-quick-search .workspace-quick-clear {
 		--ui-button-height: 18px;
-		min-width: 18px;
-		width: 18px;
 		padding: 2px;
+	}
+	@container quick-commands (max-width: 230px) {
+		.workspace-quick-title {
+			display: none;
+		}
+		.workspace-quick-controls .workspace-panel-primary {
+			margin-inline-start: auto;
+		}
 	}
 	.workspace-quick-search :deep(input::-webkit-search-cancel-button) {
 		display: none;

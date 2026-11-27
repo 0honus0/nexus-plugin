@@ -2,6 +2,7 @@ import { PluginHttpError, type PluginContextApi, type PluginViewApi } from 'nexu
 import { readonly, ref, shallowRef, type Ref } from 'vue';
 import { z } from 'zod';
 import {
+	CredentialInputSchema,
 	CredentialSchema,
 	CredentialsRevisionSchema,
 	CredentialsSnapshotSchema,
@@ -12,11 +13,18 @@ import {
 
 export type { Credential, CredentialInput, CredentialPatch } from '../shared/credentials-types.js';
 
+export interface CredentialCreateOptions {
+	readonly view?: PluginViewApi;
+	readonly signal?: AbortSignal;
+	readonly silent?: boolean;
+}
+
 export interface CredentialsClientApi {
 	readonly items: Readonly<Ref<readonly Credential[]>>;
 	readonly loaded: Readonly<Ref<boolean>>;
 	refresh(signal?: AbortSignal): Promise<void>;
 	openManager(): void;
+	create(input: CredentialInput, options?: CredentialCreateOptions): Promise<Credential>;
 }
 
 declare module 'nexus-terminal/browser' {
@@ -97,7 +105,24 @@ export class CredentialsClient implements CredentialsClientApi {
 		this.#context.app.log.report({ level: 'error', code, userVisible });
 	}
 
-	save(value: CredentialInput | CredentialPatch, id: string | undefined, view: PluginViewApi) {
+	create(input: CredentialInput, options?: CredentialCreateOptions) {
+		const parsed = CredentialInputSchema.safeParse(input);
+		if (!parsed.success)
+			return Promise.reject(
+				Object.assign(new Error('CREDENTIALS_INVALID_REQUEST'), { code: 'CREDENTIALS_INVALID_REQUEST' }),
+			);
+		return this.save(parsed.data, undefined, options?.view, {
+			signal: options?.signal,
+			silent: options?.silent,
+		});
+	}
+
+	save(
+		value: CredentialInput | CredentialPatch,
+		id: string | undefined,
+		view?: PluginViewApi,
+		options?: { signal?: AbortSignal; silent?: boolean },
+	) {
 		return this.#context.app.tasks.run(
 			async (signal) => {
 				const url = id ? '/credentials/' + encodeURIComponent(id) : '/credentials';
@@ -108,11 +133,12 @@ export class CredentialsClient implements CredentialsClientApi {
 					body: JSON.stringify(id ? { patch: value } : { credential: value }),
 				});
 				signal.throwIfAborted();
-				this.#context.app.log.report({ level: 'info', code: 'CREDENTIALS_SAVED', userVisible: true });
+				if (!options?.silent)
+					this.#context.app.log.report({ level: 'info', code: 'CREDENTIALS_SAVED', userVisible: true });
 				this.#items.value = [...this.#items.value.filter(({ id }) => id !== item.id), item];
 				return item;
 			},
-			{ view },
+			{ view, signal: options?.signal },
 		);
 	}
 

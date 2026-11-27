@@ -13,6 +13,7 @@ import TerminalAppearance from '../appearance/TerminalAppearance.vue';
 import TerminalKeyboard from '../terminal/TerminalKeyboard.vue';
 import type { PresentationItem, WorkspaceTool } from './presentation-types';
 import type { LayoutProfile } from '../../shared/layout-types.js';
+import type { FileManagerOpenFile } from '../file-manager-api.js';
 
 export interface PresentationContext {
 	ctx: PluginContextApi;
@@ -23,6 +24,7 @@ export interface PresentationContext {
 	active: boolean;
 	transport: SessionTransport;
 	input: TerminalInput;
+	openFile?: FileManagerOpenFile;
 	busy(value: boolean): void;
 }
 
@@ -30,6 +32,7 @@ export function createPresentationRegistry(
 	context: () => PresentationContext,
 	visible: (id: WorkspaceTool) => boolean,
 	profile: () => LayoutProfile,
+	fileOpened: () => void,
 ) {
 	return computed<PresentationItem[]>(() => {
 		const c = context();
@@ -63,6 +66,8 @@ export function createPresentationRegistry(
 					sessionId: c.session.id,
 					enabled: c.active && visible('files') && c.transport.connected.value,
 					connected: c.transport.connected.value,
+					openFile: c.openFile,
+					onFileOpened: fileOpened,
 					onBusy: c.busy,
 				}),
 			},

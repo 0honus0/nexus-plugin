@@ -157,8 +157,14 @@
 		</form>
 		<template #footer
 			><UiButton :disabled="saving" @click="emit('close')">{{ t('cancel') }}</UiButton
-			><UiButton :form="form" type="submit" tone="primary" :loading="saving" loading-animation="spinner"
-				><template #leading><Save :size="16" /></template>{{ t('save') }}</UiButton
+			><UiButton
+				:form="form"
+				type="submit"
+				tone="primary"
+				appearance="solid"
+				:loading="saving"
+				loading-animation="spinner"
+				><template #leading><Save :size="15" /></template>{{ t('save') }}</UiButton
 			></template
 		>
 	</UiDialog>

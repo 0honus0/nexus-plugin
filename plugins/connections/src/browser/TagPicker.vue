@@ -186,9 +186,14 @@
 	>
 		<template #footer
 			><UiButton :disabled="deleting" @click="pending = undefined">{{ t('cancel') }}</UiButton
-			><UiButton tone="danger" :loading="deleting" loading-animation="spinner" @click="remove">{{
-				t('delete')
-			}}</UiButton></template
+			><UiButton
+				tone="danger"
+				appearance="solid"
+				:loading="deleting"
+				loading-animation="spinner"
+				@click="remove"
+				>{{ t('delete') }}</UiButton
+			></template
 		>
 	</UiDialog>
 </template>

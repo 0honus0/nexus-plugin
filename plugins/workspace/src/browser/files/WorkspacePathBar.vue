@@ -1,9 +1,19 @@
 <script setup lang="ts">
-	import { computed, nextTick, onScopeDispose, ref, useId, watch } from 'vue';
+	import { computed, onScopeDispose, ref, watch } from 'vue';
 	import { useClipboard } from '@vueuse/core';
 	import { ChevronDown, Copy, Folder, Trash2 } from '@lucide/vue';
-	import { PopoverAnchor, PopoverContent, PopoverPortal, PopoverRoot } from 'reka-ui';
-	import { UiButton, UiContextMenu, UiInput } from 'nexus-terminal/browser/ui';
+	import {
+		ComboboxAnchor,
+		ComboboxContent,
+		ComboboxInput,
+		ComboboxItem,
+		ComboboxPortal,
+		ComboboxRoot,
+		ComboboxTrigger,
+		ComboboxViewport,
+		useFilter,
+	} from 'reka-ui';
+	import { UiButton, UiContextMenu } from 'nexus-terminal/browser/ui';
 	import type { PluginContextApi } from 'nexus-terminal/browser';
 	import { WorkspacePathHistorySchema } from '../../shared/workspace-path-history-types';
 	import { createWorkspaceClient } from '../workspace-client';
@@ -27,16 +37,35 @@
 	const history = ref<string[]>([]);
 	const loading = ref(false);
 	const failed = ref(false);
-	const selected = ref(-1);
 	const contextPath = ref<string>();
-	const listId = useId();
+	let restoringHistoryFocus = false;
 	let read: AbortController | undefined;
 	let writes = Promise.resolve();
 
-	const filtered = computed(() => {
-		const query = draft.value === props.path ? '' : draft.value.trim().toLowerCase();
-		return query ? history.value.filter((path) => path.toLowerCase().includes(query)) : history.value;
+	const { contains } = useFilter({ sensitivity: 'accent' });
+	const choices = computed(() => {
+		const typed = draft.value;
+		const query = typed.trim();
+		if (!query || typed === props.path) return history.value;
+		return [typed, ...history.value.filter((path) => path !== typed && contains(path, query))];
 	});
+
+	function setOpen(visible: boolean) {
+		if (visible || (!contextPath.value && !restoringHistoryFocus)) open.value = visible;
+	}
+
+	function keepHistory(event: Event) {
+		if (
+			restoringHistoryFocus ||
+			(event.target instanceof Element && event.target.closest('[data-ui="context-menu"]'))
+		)
+			event.preventDefault();
+	}
+
+	function setMenuOpen(path: string, visible: boolean) {
+		if (visible) contextPath.value = path;
+		else if (contextPath.value === path) contextPath.value = undefined;
+	}
 
 	function write(method: 'POST' | 'DELETE', path: string): Promise<void> {
 		const operation = writes.then(async () => {
@@ -66,12 +95,10 @@
 			if (!enabled) open.value = false;
 		},
 	);
-	watch(filtered, () => (selected.value = -1));
 
 	watch(
 		open,
 		(visible) => {
-			selected.value = -1;
 			if (visible) void refresh();
 			else read?.abort();
 		},
@@ -99,7 +126,7 @@
 		}
 	}
 
-	function choose(path = filtered.value[selected.value] ?? draft.value): void {
+	function choose(path = draft.value): void {
 		if (!props.enabled || !path.trim()) return;
 		open.value = false;
 		const typed = draft.value;
@@ -108,38 +135,17 @@
 		});
 	}
 
-	function onKey(event: KeyboardEvent): void {
-		if (event.isComposing) return;
-		if (event.key === 'Escape' && (open.value || draft.value !== props.path)) {
-			event.preventDefault();
-			event.stopPropagation();
-			open.value = false;
-			draft.value = props.path;
-			return;
-		}
-		if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+	function cancel(event: Event) {
+		if (!open.value && draft.value === props.path) return;
 		event.preventDefault();
 		event.stopPropagation();
-		open.value = true;
-		const length = filtered.value.length;
-		if (!length) return;
-		const step = event.key === 'ArrowDown' ? 1 : -1;
-		const start = selected.value < 0 && step < 0 ? 0 : selected.value;
-		selected.value = (start + step + length) % length;
-		void nextTick(() =>
-			document.getElementById(listId + '-' + selected.value)?.scrollIntoView({ block: 'nearest' }),
-		);
+		open.value = false;
+		draft.value = props.path;
 	}
 
-	function onOutside(event: Event): void {
-		const target = event.target;
-		if (target instanceof Element && (anchor.value?.contains(target) || target.closest('[data-ui="context-menu"]')))
-			event.preventDefault();
-	}
-
-	async function historyAction(action: string): Promise<void> {
-		const path = contextPath.value;
-		if (!path) return;
+	async function historyAction(action: string, path: string): Promise<void> {
+		restoringHistoryFocus = true;
+		if (action === 'remove') restoreHistoryFocus();
 		try {
 			if (action === 'copy') await copy(path);
 			else if (action === 'remove') {
@@ -150,127 +156,175 @@
 			}
 		} catch (cause) {
 			if (!props.signal.aborted) client.report(cause);
+		} finally {
+			if (action === 'copy') restoreHistoryFocus();
 		}
+	}
+
+	function restoreHistoryFocus() {
+		if (!props.signal.aborted && props.enabled) {
+			open.value = true;
+			anchor.value?.querySelector('input')?.focus({ preventScroll: true });
+		}
+		// Reka reconciles dismissal after the context menu and clipboard restore focus.
+		requestAnimationFrame(() => {
+			restoringHistoryFocus = false;
+		});
 	}
 </script>
 
 <template>
-	<PopoverRoot v-model:open="open">
-		<form ref="anchor" class="workspace-file-path" @submit.prevent="choose()">
-			<PopoverAnchor as-child>
-				<div class="workspace-path-field">
-					<UiInput
-						v-model="draft"
-						:aria-label="t('path')"
-						:disabled="!enabled"
-						:aria-expanded="open"
-						:aria-controls="open ? listId : undefined"
-						:aria-activedescendant="open && selected >= 0 ? listId + '-' + selected : undefined"
-						role="combobox"
-						aria-autocomplete="list"
-						autocomplete="off"
-						spellcheck="false"
-						@focus="open = true"
-						@click="open = true"
-						@update:model-value="open = true"
-						@keydown="onKey"
-					>
-						<template #leading><Folder :size="15" aria-hidden="true" /></template>
-						<template #trailing>
-							<UiButton
-								type="button"
-								class="path-history-toggle"
-								appearance="ghost"
-								density="compact"
-								icon-only
-								:aria-label="t('pathHistory.title')"
-								:title="t('pathHistory.title')"
-								:aria-expanded="open"
-								:disabled="!enabled"
-								@mousedown.prevent
-								@click="open = !open"
-								><ChevronDown :size="16" aria-hidden="true"
-							/></UiButton>
-						</template>
-					</UiInput>
-				</div>
-			</PopoverAnchor>
+	<ComboboxRoot
+		:open="open"
+		:model-value="path"
+		:disabled="!enabled"
+		:reset-search-term-on-select="false"
+		:reset-search-term-on-blur="false"
+		ignore-filter
+		open-on-focus
+		open-on-click
+		loop
+		class="workspace-file-path"
+		@update:open="setOpen"
+	>
+		<form ref="anchor" class="workspace-path-form" @submit.prevent="choose()">
+			<ComboboxAnchor class="workspace-path-field">
+				<Folder :size="15" aria-hidden="true" />
+				<ComboboxInput
+					v-model="draft"
+					class="workspace-path-input"
+					:aria-label="t('path')"
+					spellcheck="false"
+					@keydown.esc="cancel"
+				/>
+				<span class="path-history-control">
+					<ComboboxTrigger as-child>
+						<UiButton
+							type="button"
+							class="path-history-toggle"
+							appearance="ghost"
+							density="compact"
+							icon-only
+							:aria-label="t('pathHistory.title')"
+							:title="t('pathHistory.title')"
+							><ChevronDown :size="16" aria-hidden="true"
+						/></UiButton>
+					</ComboboxTrigger>
+				</span>
+			</ComboboxAnchor>
 		</form>
-		<PopoverPortal :to="anchor?.closest('[role=dialog]') ?? 'body'">
-			<PopoverContent
-				as-child
+		<ComboboxPortal :to="anchor?.closest('[role=dialog]') ?? 'body'">
+			<ComboboxContent
+				class="workspace-path-history"
+				position="popper"
 				align="start"
 				:side-offset="4"
 				:collision-padding="8"
-				@open-auto-focus.prevent
-				@close-auto-focus.prevent
-				@interact-outside="onOutside"
+				:aria-label="t('pathHistory.title')"
+				:aria-busy="loading"
+				@escape-key-down="cancel"
+				@interact-outside="keepHistory"
 			>
-				<div class="workspace-path-history">
+				<ComboboxViewport>
 					<UiContextMenu
+						v-for="choice in choices"
+						:key="choice"
+						:open="contextPath === choice"
+						:disabled="!history.includes(choice)"
 						:items="[
 							{ id: 'copy', label: t('copyPath'), icon: Copy },
 							{ id: 'remove', label: t('pathHistory.remove'), icon: Trash2, tone: 'danger' },
 						]"
-						@select="historyAction"
+						@update:open="setMenuOpen(choice, $event)"
+						@select="historyAction($event, choice)"
 					>
-						<div
-							:id="listId"
-							role="listbox"
-							tabindex="-1"
-							:aria-label="t('pathHistory.title')"
-							:aria-busy="loading"
-							@contextmenu.self.stop.prevent
+						<ComboboxItem
+							:value="choice"
+							class="path-history-option"
+							:title="choice"
+							@select.prevent="choose(choice)"
 						>
-							<button
-								v-for="(path, index) in filtered"
-								:key="path"
-								:id="listId + '-' + index"
-								class="path-history-option"
-								type="button"
-								role="option"
-								tabindex="-1"
-								:aria-selected="selected === index"
-								:title="path"
-								@mousedown.left.prevent
-								@pointerdown="contextPath = path"
-								@contextmenu="contextPath = path"
-								@click="choose(path)"
-							>
-								{{ path }}
-							</button>
-						</div>
+							{{ choice }}
+						</ComboboxItem>
 					</UiContextMenu>
-					<p v-if="!filtered.length" class="path-history-message" role="status">
+					<p v-if="!choices.length" class="path-history-message" role="status">
 						{{ t(loading ? 'pathHistory.loading' : failed ? 'pathHistory.failed' : 'pathHistory.empty') }}
 					</p>
-				</div>
-			</PopoverContent>
-		</PopoverPortal>
-	</PopoverRoot>
+				</ComboboxViewport>
+			</ComboboxContent>
+		</ComboboxPortal>
+	</ComboboxRoot>
 </template>
 
 <style scoped>
-	.path-history-toggle {
+	.workspace-file-path,
+	.workspace-path-form {
+		display: flex;
+		min-width: 0;
+	}
+
+	.workspace-path-form {
+		flex: 1;
+	}
+
+	.workspace-path-field .path-history-toggle {
 		--ui-button-height: 24px;
-		width: 26px;
-		min-width: 26px;
-		padding: 0;
+		--ui-button-radius: 5px;
 	}
 
 	.workspace-path-field {
 		display: flex;
 		flex: 1;
+		align-items: center;
 		min-width: 0;
+		min-height: var(--workspace-control-height);
+		gap: 7px;
+		padding-inline: 8px 4px;
+		border: 1px solid var(--ui-border);
+		border-radius: var(--workspace-control-radius);
+		background: var(--ui-surface);
+		color: color-mix(in srgb, var(--ui-primary) 40%, var(--ui-muted));
 	}
 
-	.workspace-path-history {
+	.workspace-path-field:focus-within {
+		border-color: var(--ui-primary);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-primary) 10%, transparent);
+	}
+
+	.workspace-path-field > svg {
+		flex: none;
+	}
+
+	.workspace-path-input {
+		flex: 1;
+		align-self: stretch;
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		outline: 0;
+		background: transparent;
+		color: var(--ui-text);
+		font: 500 13px var(--ui-font-family, system-ui, sans-serif);
+		user-select: text;
+	}
+
+	.workspace-path-field:has(input:disabled) {
+		opacity: 0.6;
+	}
+
+	.path-history-control {
+		flex: none;
+		padding-inline-start: 5px;
+		border-inline-start: 1px solid var(--workspace-panel-edge);
+	}
+
+	:global(.workspace-path-history) {
 		z-index: 105;
 		box-sizing: border-box;
 		width: max-content;
-		min-width: min(var(--reka-popover-trigger-width), var(--reka-popover-content-available-width));
-		max-width: var(--reka-popover-content-available-width);
-		max-height: min(280px, var(--reka-popover-content-available-height));
+		min-width: min(var(--reka-combobox-trigger-width), var(--reka-combobox-content-available-width));
+		max-width: var(--reka-combobox-content-available-width);
+		max-height: min(280px, var(--reka-combobox-content-available-height));
 		overflow: auto;
 		padding: 4px;
 		border: 1px solid var(--ui-border);
@@ -289,9 +343,7 @@
 		border-radius: 5px;
 		background: transparent;
 		color: inherit;
-		font:
-			12px ui-monospace,
-			monospace;
+		font: 500 13px / 1.4 var(--ui-font-family, system-ui, sans-serif);
 		text-align: start;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -300,7 +352,7 @@
 
 	.path-history-option:hover,
 	.path-history-option:focus-visible,
-	.path-history-option[aria-selected='true'] {
+	.path-history-option[data-highlighted] {
 		background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
 	}
 

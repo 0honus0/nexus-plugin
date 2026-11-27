@@ -138,3 +138,28 @@ it('evicts an unconfirmed failed layout so reopening can fetch the backend state
 	expect(reopened.values.get('wide')?.value.dock.grid.width).toBe(700);
 	reopenedScope.stop();
 });
+
+it('persists size-only edits for new sessions without bumping shared structure revision', async () => {
+	vi.useFakeTimers();
+	request.mockResolvedValue(null);
+	const { shared, scope } = setup();
+	const first = Symbol('session-a'),
+		second = Symbol('session-b');
+
+	shared.update('wide', layout(1000), first, true);
+	const initialRevision = shared.values.get('wide')?.structureRevision;
+	expect(initialRevision).toBeTypeOf('number');
+
+	// Size-only edit updates latest default value & queues save, but does NOT bump structureRevision.
+	shared.update('wide', layout(1080), second, false);
+	expect(shared.values.get('wide')?.value.dock.grid.width).toBe(1080);
+	expect(shared.values.get('wide')?.structureRevision).toBe(initialRevision);
+
+	// Structural shape edit bumps structureRevision so existing sessions sync shape.
+	shared.update('wide', layout(1120), second, true);
+	expect(shared.values.get('wide')?.structureRevision).toBeGreaterThan(initialRevision!);
+
+	await shared.flush();
+	expect(request).toHaveBeenCalledWith('layouts/wide', 'PUT', expect.objectContaining({ version: 4 }));
+	scope.stop();
+});

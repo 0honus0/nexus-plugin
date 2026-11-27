@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { computed, ref } from 'vue';
-	import { Server, Monitor, ScreenShare, Search, ChevronDown, Tags, Play, X, LoaderCircle } from '@lucide/vue';
+	import { Server, Monitor, ScreenShare, Search, ChevronDown, Tags, Play, Plus, X, LoaderCircle } from '@lucide/vue';
 	import { CollapsibleRoot, CollapsibleTrigger, CollapsibleContent } from 'reka-ui';
 	import { UiBadge, UiButton, UiCard, UiInput, UiSelect } from 'nexus-terminal/browser/ui';
 	import { type Connection } from '@nexus-terminal/connections/connections-client-api';
@@ -14,12 +14,14 @@
 		connectionsReadFailed: boolean;
 		connecting: boolean;
 		selected: string;
+		filesOnly?: boolean;
 		i18n: WorkspaceI18n;
 	}>();
 	const emit = defineEmits<{
 		connect: [id: string];
 		resume: [session: SessionInfo];
 		close: [id: string];
+		create: [];
 		manage: [];
 		retry: [];
 	}>();
@@ -64,22 +66,22 @@
 	<div class="workspace-home">
 		<header class="workspace-home-heading">
 			<div>
-				<h2>{{ t('subtitle') }}</h2>
-				<p>{{ t('description') }}</p>
+				<h2>{{ t(filesOnly ? 'fileManagerChoose' : 'subtitle') }}</h2>
+				<p v-if="connections.length">{{ t(filesOnly ? 'fileManagerDescription' : 'description') }}</p>
 			</div>
-			<UiButton :disabled="!connectionsAvailable" @click="emit('manage')">{{ t('manage') }}</UiButton>
+			<div v-if="connections.length" class="workspace-home-actions">
+				<UiButton tone="primary" appearance="solid" :disabled="!connectionsAvailable" @click="emit('create')">
+					<template #leading><Plus :size="15" /></template>{{ t('addConnection') }}
+				</UiButton>
+			</div>
 		</header>
-		<div class="workspace-home-filters">
+		<div v-if="connections.length" class="workspace-home-filters">
 			<div class="workspace-home-search">
-				<UiInput
-					v-model="search"
-					density="touch"
-					:placeholder="t('searchConnections')"
-					:aria-label="t('searchConnections')"
-					><template #leading><Search :size="17" /></template
+				<UiInput v-model="search" :placeholder="t('searchConnections')" :aria-label="t('searchConnections')"
+					><template #leading><Search :size="16" /></template
 				></UiInput>
 			</div>
-			<UiSelect v-model="type" :options="typeOptions" :aria-label="t('filterType')" density="touch" />
+			<UiSelect v-if="!filesOnly" v-model="type" :options="typeOptions" :aria-label="t('filterType')" />
 		</div>
 		<section v-if="suspended.length" class="workspace-suspended">
 			<h3>
@@ -166,8 +168,16 @@
 					</div></CollapsibleContent
 				>
 			</CollapsibleRoot>
-			<p v-if="connectionsLoaded && !groups.length" class="workspace-home-empty">
-				{{ t(connections.length ? 'noConnectionsMatch' : 'emptyHint') }}
+			<div v-if="connectionsLoaded && !connections.length" class="workspace-home-empty-card">
+				<span class="workspace-home-empty-card__icon" aria-hidden="true"><Server :size="24" /></span>
+				<h3>{{ t('emptyConnections') }}</h3>
+				<p>{{ t(filesOnly ? 'fileManagerEmptyHint' : 'emptyHint') }}</p>
+				<UiButton tone="primary" appearance="solid" :disabled="!connectionsAvailable" @click="emit('create')">
+					<template #leading><Plus :size="15" /></template>{{ t('addConnection') }}
+				</UiButton>
+			</div>
+			<p v-else-if="connectionsLoaded && !groups.length" class="workspace-home-empty">
+				{{ t('noConnectionsMatch') }}
 			</p>
 		</div>
 	</div>

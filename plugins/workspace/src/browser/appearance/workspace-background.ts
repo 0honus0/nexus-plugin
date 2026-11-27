@@ -1,7 +1,6 @@
 import { computed, inject, onScopeDispose, ref, type InjectionKey } from 'vue';
 import type { PluginContextApi } from 'nexus-terminal/browser';
 import type { PluginWindowApi } from 'nexus-terminal/browser';
-import { useMutationObserver } from '@vueuse/core';
 import {
 	BackgroundSnapshotSchema,
 	BackgroundSettingsSchema,
@@ -73,13 +72,8 @@ export function createWorkspaceBackground(ctx: PluginContextApi, view: PluginWin
 	const imageUrl = computed(() =>
 		state.value.image ? client.url('appearance/image/' + state.value.image.id) : undefined,
 	);
-	const root = window.document.documentElement;
-	const motion = ref(root.dataset.uiMotion !== 'reduced');
-	useMutationObserver(root, () => (motion.value = root.dataset.uiMotion !== 'reduced'), {
-		attributes: true,
-		attributeFilter: ['data-ui-motion'],
-	});
-	const animated = computed(() => settings.value.animation && motion.value);
+	// 终端动态背景由自身开关控制，窗口隐藏或系统开启减少动态效果时仍会自动暂停。
+	const animated = computed(() => settings.value.animation);
 	const windowVisible = computed(() => view.state.value.mode !== 'minimized');
 
 	const mutate = (run: () => Promise<BackgroundSnapshot>) => document.mutate(run);

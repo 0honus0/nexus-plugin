@@ -110,14 +110,15 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 		},
 	});
 	await host
-		.request(base + '/layouts/medium', {
+		.request(base + '/layouts/compact', {
 			method: 'PUT',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(layout),
 		})
 		.then((response) => expect(response.status).toBe(204));
-	expect(WorkspaceLayoutResponseSchema.parse(await host.json(base + '/layouts/medium')).layout).toEqual(layout);
+	expect(WorkspaceLayoutResponseSchema.parse(await host.json(base + '/layouts/compact')).layout).toEqual(layout);
 	expect(await host.json(base + '/layouts/wide')).toEqual({ layout: null });
+	expect((await host.request(base + '/layouts/medium')).status).toBe(400);
 	expect(
 		await host.json(
 			base + '/catalog/favorites',

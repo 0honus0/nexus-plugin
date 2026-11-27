@@ -29,6 +29,9 @@
 		() => props.context,
 		visible,
 		() => profile.value,
+		() => {
+			if (config.value.tools.files?.presentation === 'sheet') toolOpen.files = false;
+		},
 	);
 	const dockViewport = ref<HTMLElement>();
 	const root = ref<HTMLElement>(),

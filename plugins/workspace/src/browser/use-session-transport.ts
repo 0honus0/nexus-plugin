@@ -74,6 +74,7 @@ export function useSessionTransport(ctx: PluginContextApi, id: string, viewSigna
 		connected,
 		connecting,
 		terminalClosed,
+		connect,
 
 		send(message: unknown) {
 			if (signal.aborted || !connected.value || terminalClosed.value) return false;

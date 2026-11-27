@@ -318,12 +318,14 @@ export function registerWorkspaceFilesHttp(
 
 			handler: (input: z.output<typeof getSessionsIdFileInput>, context: HttpStreamContext) =>
 				workspaceHttp(log, context.signal, async () => {
-					const { id, path, taskId, batchId, size, overwrite } = input;
+					const { id, path, taskId, batchId, size, overwrite, expectedHash } = input;
 					const session = service.sessionFiles(id);
 					if (!context.body) throw new WorkspaceError('WORKSPACE_INVALID_REQUEST', 415);
 					const headers = FileUploadHeadersSchema.safeParse(context.headers);
 					if (!headers.success) throw new WorkspaceError('WORKSPACE_INVALID_REQUEST', 400);
 					const declared = headers.data['content-length'] ?? size;
+					if (expectedHash && (overwrite !== 'true' || declared === undefined || declared > 2 * 1024 * 1024))
+						throw new WorkspaceError('WORKSPACE_INVALID_REQUEST', 400);
 					if (size !== undefined && declared !== size)
 						throw new WorkspaceError('WORKSPACE_TRANSFER_SIZE_MISMATCH', 400);
 					const body = context.body;
@@ -341,7 +343,15 @@ export function registerWorkspaceFilesHttp(
 							totalBytes: declared,
 						},
 						(progress) =>
-							session.files.upload(path, body, progress.signal, progress, declared, overwrite === 'true'),
+							session.files.upload(
+								path,
+								body,
+								progress.signal,
+								progress,
+								declared,
+								overwrite === 'true',
+								expectedHash,
+							),
 						{ signal: context.signal },
 					);
 					await task.done;

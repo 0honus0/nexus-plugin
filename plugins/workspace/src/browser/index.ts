@@ -1,8 +1,9 @@
-import { defineAsyncComponent, defineComponent, h, onScopeDispose } from 'vue';
+import { defineAsyncComponent, defineComponent, h, onScopeDispose, shallowRef } from 'vue';
 import { SquareTerminal } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import type { PluginModuleApi, PluginWindowProps } from 'nexus-terminal/browser';
 import { createWorkspaceI18n, registerWorkspaceNotices, workspaceTitle } from './workspace-i18n.js';
+import type { FileManagerOpenFile, WorkspaceFileManagerApi } from './file-manager-api.js';
 import WorkspaceTile from './WorkspaceTile.vue';
 import WorkspaceLoading from './WorkspaceLoading.vue';
 import 'dockview-vue/dist/styles/dockview.css';
@@ -17,6 +18,7 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 	context.onDispose(() => css.remove());
 
 	let appModule: Promise<typeof import('./WorkspaceApp.vue')> | undefined;
+	const fileOpener = shallowRef<FileManagerOpenFile>();
 
 	function preload() {
 		context.signal.throwIfAborted();
@@ -26,35 +28,51 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 		}));
 	}
 
-	const component = defineAsyncComponent({
-		async loader() {
-			const { default: App } = await preload();
-			context.signal.throwIfAborted();
-			return defineComponent({
-				props: ['context', 'view'],
+	context.provide('fileManager', {
+		createView: (openFile) => createApplication(true, openFile),
 
-				setup(props: PluginWindowProps) {
-					const { locale } = useI18n({ useScope: 'global' });
-					const i18n = createWorkspaceI18n(locale);
-					onScopeDispose(i18n.dispose);
-					return () => h(App, { ...props, ctx: context, i18n });
-				},
-			});
+		registerFileOpener(openFile) {
+			fileOpener.value = openFile;
+			return () => {
+				if (fileOpener.value === openFile) fileOpener.value = undefined;
+			};
 		},
+	} satisfies WorkspaceFileManagerApi);
 
-		loadingComponent: WorkspaceLoading,
-		delay: 0,
-	});
+	function createApplication(filesOnly: boolean, openFile?: FileManagerOpenFile) {
+		return defineAsyncComponent({
+			async loader() {
+				const { default: App } = await preload();
+				context.signal.throwIfAborted();
+				return defineComponent({
+					props: ['context', 'view'],
+
+					setup(props: PluginWindowProps) {
+						const { locale } = useI18n({ useScope: 'global' });
+						const i18n = createWorkspaceI18n(locale);
+						onScopeDispose(i18n.dispose);
+						return () =>
+							h(App, { ...props, ctx: context, i18n, filesOnly, openFile: openFile ?? fileOpener.value });
+					},
+				});
+			},
+
+			loadingComponent: WorkspaceLoading,
+			delay: 0,
+		});
+	}
 
 	const application = {
 		id: 'main',
 		label: workspaceTitle,
-		component,
+		component: createApplication(false),
 		scrollMode: 'content',
 		tile: { component: WorkspaceTile, showAtIconSize: true },
 	} as const;
-	// 旧宿主可能没有预加载或图标字段。校验失败的贡献尚未登记。
+	const defaultWindowSize = { width: 1080, height: 700 } as const;
+	// 旧宿主可能没有预加载、默认窗口尺寸或图标字段。校验失败的贡献尚未登记。
 	for (const candidate of [
+		{ ...application, icon: SquareTerminal, preload, defaultWindowSize },
 		{ ...application, icon: SquareTerminal, preload },
 		{ ...application, icon: SquareTerminal },
 	]) {

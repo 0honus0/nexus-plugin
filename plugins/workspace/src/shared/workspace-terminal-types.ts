@@ -1,16 +1,29 @@
 import { z } from 'zod';
-import { LayoutProfileSchema } from './layout-types.js';
 
 export const terminalFontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 export const TerminalFontSizeSchema = z.number().int().min(8).max(40);
+
+const TerminalFontSizesSchema = z.preprocess(
+	(value) => {
+		if (value && typeof value === 'object' && !Array.isArray(value) && 'medium' in value) {
+			const { medium, ...rest } = value as Record<string, unknown>;
+			return { ...rest, wide: rest.wide ?? medium };
+		}
+		return value;
+	},
+	z.strictObject({
+		compact: TerminalFontSizeSchema,
+		wide: TerminalFontSizeSchema,
+	}),
+);
 
 const color = z.string().regex(/^#[0-9a-f]{6}$/i);
 
 /** Workspace-owned display preferences. Width profiles describe available app space, never device identity. */
 export const TerminalDisplaySchema = z.strictObject({
 	fontFamily: z.string().trim().min(1).max(500).default(terminalFontFamily),
-	fontSizes: z.record(LayoutProfileSchema, TerminalFontSizeSchema).default({ compact: 13, medium: 13, wide: 13 }),
+	fontSizes: TerminalFontSizesSchema.default(() => ({ compact: 13, wide: 13 })),
 	stroke: z
 		.strictObject({
 			enabled: z.boolean().default(false),

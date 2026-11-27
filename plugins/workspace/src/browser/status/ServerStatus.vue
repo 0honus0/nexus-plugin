@@ -279,7 +279,7 @@
 			:class="{ 'has-history': Boolean(selectedMetric), 'status-has-data': hasVisibleData }"
 		>
 			<section class="monitor-panel">
-				<header class="monitor-header">
+				<header class="monitor-header workspace-panel-bar">
 					<strong>{{ t('monitor.title') }}</strong>
 					<button
 						v-if="host"

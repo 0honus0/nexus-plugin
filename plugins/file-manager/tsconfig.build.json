@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist/types",
+    "paths": {
+      "@nexus-terminal/workspace/file-manager-api": ["../workspace/dist/types/browser/file-manager-api.d.ts"]
+    }
+  }
+}

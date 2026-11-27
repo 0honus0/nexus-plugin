@@ -27,7 +27,7 @@ const byExtension = new Map(
 
 /** Match file types locally, like the previous file manager, without loading icon assets. */
 export function fileIconKind(name: string, kind: FileEntry['kind']) {
-	if (kind === 'directory') return name === '..' ? 'parent' : 'folder';
+	if (kind === 'directory') return 'folder';
 	if (kind === 'link') return 'link';
 	if (kind !== 'file') return 'file';
 	const lower = name.toLowerCase();

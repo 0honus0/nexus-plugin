@@ -1,5 +1,5 @@
 name: Set up plugin repository
-description: Install pinned Node, pnpm and the shared host format tool
+description: Install pinned Node, pnpm and the packaged SDK and format tool
 inputs:
   test-host:
     description: Host preparation (false, source for CI, true for published release image)
@@ -7,14 +7,6 @@ inputs:
 runs:
   using: composite
   steps:
-    # The path matches the existing file: dependency in the plugin repository.
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        repository: 0honus0/nexus-terminal
-        ref: 442905d3d0d5dc495ce140be289eb8a68e154b85
-        path: honus/nexus-terminal
-        sparse-checkout: scripts/format
-        persist-credentials: false
     - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       with:
         package_json_file: home/nexus-plugin/package.json

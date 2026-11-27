@@ -5,18 +5,30 @@ import { terminalDisplayStyle } from '../src/browser/appearance/terminal-display
 
 it('loads older preferences with independent terminal display defaults', () => {
 	const preferences = WorkspacePreferencesSchema.parse({ theme: null });
-	expect(preferences.display.fontSizes).toEqual({ compact: 13, medium: 13, wide: 13 });
+	expect(preferences.display.fontSizes).toEqual({ compact: 13, wide: 13 });
 	expect(preferences.display.stroke.enabled).toBe(false);
 	expect(preferences.display.shadow.enabled).toBe(false);
 	preferences.display.fontSizes.compact = 20;
 	expect(WorkspacePreferencesSchema.parse({ theme: null }).display.fontSizes.compact).toBe(13);
 });
 
+it('migrates legacy medium font size records cleanly to the two-profile schema', () => {
+	expect(TerminalDisplaySchema.parse({ fontSizes: { compact: 12, medium: 15, wide: 16 } }).fontSizes).toEqual({
+		compact: 12,
+		wide: 16,
+	});
+	expect(TerminalDisplaySchema.parse({ fontSizes: { compact: 12, medium: 15 } }).fontSizes).toEqual({
+		compact: 12,
+		wide: 15,
+	});
+});
+
 it('rejects incomplete width profiles, invalid dimensions and non-color CSS', () => {
 	for (const value of [
 		{ fontFamily: ' ' },
-		{ fontSizes: { compact: 13, wide: 13 } },
-		{ fontSizes: { compact: 7, medium: 13, wide: 41 } },
+		{ fontSizes: { compact: 13 } },
+		{ fontSizes: { wide: 13 } },
+		{ fontSizes: { compact: 7, wide: 41 } },
 		{ stroke: { width: -1 } },
 		{ shadow: { blur: 21 } },
 		{ shadow: { color: 'var(--ui-text)' } },

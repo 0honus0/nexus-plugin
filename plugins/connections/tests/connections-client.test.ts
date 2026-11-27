@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { PluginContextApi } from 'nexus-terminal/browser';
 import { ConnectionsClient } from '../src/browser/connections-client-api.js';
+import { parseQuickAddress } from '../src/browser/connection-presentation.js';
 import type { ConnectionCatalog } from '../src/shared/connection-types.js';
 
 test('合并目录请求并丢弃读取期间被新修订替代的结果', async () => {
@@ -89,4 +90,23 @@ test('retrying an initial failed subscription restores live updates', async () =
 	publish({ revision: 2 });
 	await client.refresh();
 	assert.equal(reads, 2);
+});
+
+test('parseQuickAddress splits ssh commands, user@host:port, and IPv6 endpoints safely', () => {
+	assert.deepEqual(parseQuickAddress('ssh -p 2222 root@192.168.1.10'), {
+		host: '192.168.1.10',
+		port: 2222,
+		username: 'root',
+	});
+	assert.deepEqual(parseQuickAddress('ubuntu@[2001:db8::1]:2200'), {
+		host: '2001:db8::1',
+		port: 2200,
+		username: 'ubuntu',
+	});
+	assert.deepEqual(parseQuickAddress('10.0.0.5:2202'), {
+		host: '10.0.0.5',
+		port: 2202,
+	});
+	assert.equal(parseQuickAddress('2001:db8::1'), undefined);
+	assert.equal(parseQuickAddress('example.com'), undefined);
 });

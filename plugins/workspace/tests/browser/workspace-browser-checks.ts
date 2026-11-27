@@ -468,9 +468,11 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	const historyBounds = (await page.locator('.workspace-path-history').boundingBox())!;
 	expect(historyBounds.x).toBeCloseTo(fieldBounds.x, 0);
 	expect(historyBounds.width).toBeCloseTo(fieldBounds.width, 0);
-	await expect(historyList.getByRole('option')).toHaveCount(1);
+	await expect(historyList.getByRole('option')).toHaveCount(2);
+	const typedPath = historyList.getByRole('option', { name: 'prefetch', exact: true });
+	await expect(address).toHaveAttribute('aria-activedescendant', (await typedPath.getAttribute('id'))!);
 	await address.press('ArrowDown');
-	await expect(savedFolder).toHaveAttribute('aria-selected', 'true');
+	await expect(address).toHaveAttribute('aria-activedescendant', (await savedFolder.getAttribute('id'))!);
 	await address.press('Enter');
 	await expect(prefetchedFile).toBeVisible();
 	await expect.poll(history).toEqual(['/prefetch-fixture', '/']);

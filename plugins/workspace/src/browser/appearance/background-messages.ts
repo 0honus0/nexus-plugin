@@ -11,7 +11,7 @@ export const backgroundMessages = {
 		cover: '填满',
 		contain: '完整显示',
 		overlay: '遮罩深度',
-		motionHint: '动画跟随本体动态效果与系统减少动态效果设置；窗口隐藏时停止运行。',
+		motionHint: '窗口隐藏或开启系统减少动态效果时，动态背景会自动暂停运行。',
 		library: '动态与静态预设',
 		clearPreset: '取消预设',
 		search: '搜索背景',
@@ -59,7 +59,7 @@ export const backgroundMessages = {
 		contain: 'Contain',
 		overlay: 'Overlay',
 		motionHint:
-			'Animation follows application motion and system reduced-motion settings. Hidden windows stop background work.',
+			'Background animation pauses automatically when the window is hidden or system reduced motion is enabled.',
 		library: 'Animated and static presets',
 		clearPreset: 'Clear preset',
 		search: 'Search backgrounds',

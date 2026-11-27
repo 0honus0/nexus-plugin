@@ -2,7 +2,9 @@ export const messages = {
 	zh: {
 		refresh: '刷新认证',
 		title: '认证管理',
+		tile: { saved: '已保存', password: '密码', privateKey: '密钥' },
 		search: '搜索名称或用户名',
+		searchShort: '搜索认证',
 		add: '添加认证',
 		edit: '编辑认证',
 		name: '名称',
@@ -26,8 +28,10 @@ export const messages = {
 		empty: '还没有认证信息',
 		emptyHint: '保存一套认证，让不同连接复用。',
 		noResults: '没有匹配的认证',
+		clearFilters: '重置筛选',
 		actions: '管理认证',
 		key: '私钥',
+		allTypes: '全部类型',
 		all: '全部',
 		notices: {
 			CREDENTIALS_KEY_TYPE_UNSUPPORTED: '暂不支持此密钥类型。',
@@ -45,7 +49,9 @@ export const messages = {
 	en: {
 		refresh: 'Refresh credentials',
 		title: 'Credentials',
+		tile: { saved: 'Saved', password: 'Password', privateKey: 'Key' },
 		search: 'Search name or username',
+		searchShort: 'Search',
 		add: 'Add credential',
 		edit: 'Edit credential',
 		name: 'Name',
@@ -69,8 +75,10 @@ export const messages = {
 		empty: 'No credentials yet',
 		emptyHint: 'Save a credential to reuse across connections.',
 		noResults: 'No matching credentials',
+		clearFilters: 'Reset filters',
 		actions: 'Manage credential',
 		key: 'Private key',
+		allTypes: 'All types',
 		all: 'All',
 		notices: {
 			CREDENTIALS_KEY_TYPE_UNSUPPORTED: 'This key type is not supported.',

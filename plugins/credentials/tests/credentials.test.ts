@@ -101,16 +101,11 @@ test(
 			['SSH key fixture', 'Private key'],
 		]) {
 			const card = app.locator('.credentials-card').filter({ hasText: name });
-			const badge = card.locator('.ui-card__badge');
-			const remove = card.getByRole('button', { name: 'Delete · ' + name });
-			await expect(badge).toHaveText(type);
-			await expect(card.locator('.ui-card__tags')).toHaveCount(0);
-			const bounds = (await card.boundingBox())!;
-			expect(bounds.height).toBeLessThanOrEqual(60);
-			const label = (await badge.boundingBox())!;
-			const action = (await remove.boundingBox())!;
-			expect(label.x + label.width).toBeLessThan(action.x);
-			expect(label.y + label.height / 2).toBeCloseTo(action.y + action.height / 2, 0);
+			const label = card.getByText(type, { exact: true });
+			const menu = card.getByRole('button', { name: 'Manage credential · ' + name });
+			await expect(label).toHaveCount(1);
+			const bounds = (await label.boundingBox())!;
+			const action = (await menu.boundingBox())!;
 			expect(action.y + action.height / 2).toBeCloseTo(bounds.y + bounds.height / 2, 0);
 		}
 
@@ -139,11 +134,13 @@ test(
 		const search = app.getByRole('textbox', { name: 'Search name or username', exact: true });
 		await search.fill('browser-user');
 		await expect(app.locator('.credentials-card')).toHaveCount(1);
-		await app.getByRole('combobox', { name: 'Authentication', exact: true }).click();
+		const filters = app.getByRole('combobox', { name: 'Authentication', exact: true });
+		await filters.click();
 		await page.getByRole('option', { name: 'Private key', exact: true }).click();
+		await expect(filters).toContainText('Private key');
 		await expect(app.getByText('No matching credentials', { exact: true })).toBeVisible();
-		await app.getByRole('combobox', { name: 'Authentication', exact: true }).click();
-		await page.getByRole('option', { name: 'All', exact: true }).click();
+		await filters.click();
+		await page.getByRole('option', { name: 'All types', exact: true }).click();
 		await search.clear();
 		await expect(app.getByText('Edited browser credential', { exact: true })).toBeVisible();
 
@@ -175,12 +172,18 @@ test(
 		await dialog.getByLabel('Key passphrase', { exact: true }).fill('fixture');
 		await dialog.getByRole('button', { name: 'Save', exact: true }).click();
 		await expect(app.getByText('Imported key fixture', { exact: true })).toBeVisible();
-		const remove = app.getByRole('button', { name: 'Delete · Imported key fixture', exact: true });
-		await remove.click();
+		const menu = app.getByRole('button', { name: 'Manage credential · Imported key fixture', exact: true });
+
+		const remove = async () => {
+			await menu.click();
+			await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+		};
+
+		await remove();
 		const confirmation = page.getByRole('dialog', { name: 'Delete credential', exact: true });
 		await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
 		await expect(app.getByText('Imported key fixture', { exact: true })).toBeVisible();
-		await remove.click();
+		await remove();
 		await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
 		await expect(app.getByText('Imported key fixture', { exact: true })).toHaveCount(0);
 

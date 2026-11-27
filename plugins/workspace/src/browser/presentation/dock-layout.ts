@@ -42,6 +42,19 @@ export function dockSizes(dock: Dock) {
 	return result;
 }
 
+export function sameDockSizes(
+	a: Readonly<Record<string, number>>,
+	b: Readonly<Record<string, number>>,
+	tolerance = 0.005,
+): boolean {
+	const keys = Object.keys(a);
+	if (keys.length !== Object.keys(b).length) return false;
+	return keys.every((key) => {
+		const other = b[key];
+		return other !== undefined && Math.abs(a[key]! - other) <= tolerance;
+	});
+}
+
 export function withDockSizes(dock: Dock, sizes: Readonly<Record<string, number>>): Dock {
 	function resize(node: GridNode, axis: Axis): GridNode {
 		if (!Array.isArray(node.data)) return node;

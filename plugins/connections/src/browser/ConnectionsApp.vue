@@ -17,12 +17,11 @@
 	import {
 		UiInput,
 		UiButton,
-		UiSelect,
-		UiBadge,
 		UiCard,
 		UiEmptyState,
 		UiDialog,
 		UiDropdownMenu,
+		UiSelect,
 	} from 'nexus-terminal/browser/ui';
 	import type { PluginWindowProps } from 'nexus-terminal/browser';
 	import { ConnectionTypeSchema, type Connection, type ConnectionEditorRequest } from '../shared/connection-types';
@@ -87,14 +86,34 @@
 			selectedTag.value = value;
 		},
 	});
+	const icons = { ssh: Terminal, rdp: Monitor, vnc: ScreenShare };
 	const typeOptions = computed(() => [
 		{ value: 'all', label: t('allTypes') },
 		...ConnectionTypeSchema.options.map((value) => ({ value, label: t('types.' + value) })),
 	]);
-	const tagOptions = computed(() => [
+	const tagSelectOptions = computed(() => [
 		{ value: 'all', label: t('allTags') },
-		...catalog.value.tags.map((tag) => ({ value: tag.id, label: tag.name })),
+		...catalog.value.tags.map(({ id, name }) => ({ value: id, label: name })),
 	]);
+	const activeTagName = computed(() => catalog.value.tags.find((item) => item.id === tag.value)?.name);
+	const visibleTagLimit = 2;
+
+	// 卡片标签行固定一行：当前筛选的标签优先展示，其余折叠为 +N。
+	function visibleTags(item: Connection): string[] {
+		const name = activeTagName.value;
+		const ordered =
+			name && item.tags.includes(name) ? [name, ...item.tags.filter((other) => other !== name)] : item.tags;
+		return ordered.slice(0, visibleTagLimit);
+	}
+
+	const hasFilters = computed(() => Boolean(search.value.trim() || type.value !== 'all' || tag.value !== 'all'));
+
+	function clearFilters() {
+		search.value = '';
+		type.value = 'all';
+		tag.value = 'all';
+	}
+
 	const usernames = computed(() => new Map(credentials.value?.items.value.map(({ id, username }) => [id, username])));
 
 	function username(item: Connection): string {
@@ -115,7 +134,7 @@
 
 	const entries = computed(() => {
 		const query = search.value.trim().toLowerCase();
-		const name = catalog.value.tags.find((item) => item.id === tag.value)?.name;
+		const name = activeTagName.value;
 		return catalog.value.connections.filter(
 			(item) =>
 				(type.value === 'all' || item.type === type.value) &&
@@ -133,7 +152,6 @@
 		else if (action === 'delete') pending.value = item;
 	}
 
-	const icons = { ssh: Terminal, rdp: Monitor, vnc: ScreenShare };
 	onMounted(() => {
 		if (!loaded.value) void refresh();
 	});
@@ -161,21 +179,31 @@
 </script>
 <template>
 	<section class="connections-app" :aria-label="t('title')" data-ui-selection="none">
-		<header class="connections-toolbar">
-			<div class="connections-search">
-				<UiInput v-model="search" :placeholder="t('search')" :aria-label="t('search')"
-					><template #leading><Search :size="17" /></template
-				></UiInput>
-			</div>
-			<div class="connections-filters">
-				<UiSelect v-model="type" :options="typeOptions" :aria-label="t('type')" /><UiSelect
+		<header v-if="!loaded || catalog.connections.length" class="connections-toolbar">
+			<div class="connections-toolbar-filters">
+				<div class="connections-search">
+					<UiInput v-model="search" :placeholder="t('searchShort')" :aria-label="t('search')"
+						><template #leading><Search :size="16" /></template
+					></UiInput>
+				</div>
+				<UiSelect
+					v-model="type"
+					class="connections-type-filter"
+					:options="typeOptions"
+					:aria-label="t('type')"
+				/>
+				<UiSelect
+					v-if="catalog.tags.length"
 					v-model="tag"
-					:options="tagOptions"
+					class="connections-tag-filter"
+					:options="tagSelectOptions"
 					:aria-label="t('tags')"
 				/>
 			</div>
 			<div class="connections-toolbar-actions">
-				<UiButton tone="primary" @click="editor = {}"><Plus :size="17" />{{ t('add') }}</UiButton>
+				<UiButton tone="primary" appearance="solid" @click="editor = {}"
+					><template #leading><Plus :size="15" /></template>{{ t('add') }}</UiButton
+				>
 				<UiButton
 					appearance="ghost"
 					icon-only
@@ -183,11 +211,15 @@
 					loading-animation="icon"
 					:aria-label="t('refresh')"
 					@click="refreshAll"
-					><RefreshCw :size="17"
+					><RefreshCw :size="16"
 				/></UiButton>
 			</div>
 		</header>
-		<div class="connections-list" :aria-busy="loading">
+		<div
+			class="connections-list"
+			:data-first="(loaded && !catalog.connections.length) || undefined"
+			:aria-busy="loading"
+		>
 			<UiCard
 				v-for="item in entries"
 				:key="item.id"
@@ -199,30 +231,47 @@
 				:tone="item.type === 'ssh' ? 'primary' : item.type === 'rdp' ? 'success' : 'neutral'"
 				@select="editor = { connection: item }"
 			>
-				<template #title-end>
-					<UiBadge
-						class="connections-type"
-						:tone="item.type === 'ssh' ? 'primary' : item.type === 'rdp' ? 'success' : 'neutral'"
-						>{{ t('types.' + item.type) }}</UiBadge
-					>
+				<template #badge>
+					<span class="connections-type" :data-type="item.type">{{ t('types.' + item.type) }}</span>
 				</template>
 				<template v-if="item.tags.length" #tags>
-					<span v-for="name in item.tags" :key="name" :title="name" class="connections-tag">{{ name }}</span>
+					<span
+						v-for="name in visibleTags(item)"
+						:key="name"
+						:title="name"
+						class="connections-tag"
+						:data-active="name === activeTagName || undefined"
+						>{{ name }}</span
+					>
+					<span
+						v-if="item.tags.length > visibleTagLimit"
+						class="connections-tag-more"
+						:title="item.tags.join(', ')"
+						>+{{ item.tags.length - visibleTagLimit }}</span
+					>
 				</template>
 				<template #actions>
 					<UiDropdownMenu :items="actions" @select="selectAction($event, item)">
 						<UiButton appearance="ghost" icon-only :aria-label="t('actions') + ' · ' + item.name"
-							><Ellipsis :size="19"
+							><Ellipsis :size="18"
 						/></UiButton>
 					</UiDropdownMenu>
 				</template>
 			</UiCard>
 			<UiEmptyState
+				class="connections-empty"
 				v-if="loaded && !entries.length"
-				:icon="Server"
+				:icon="catalog.connections.length ? Search : Server"
 				:title="t(catalog.connections.length ? 'noResults' : 'empty')"
 				:description="t(catalog.connections.length ? 'noResultsHint' : 'emptyHint')"
-			/>
+			>
+				<UiButton v-if="!catalog.connections.length" tone="primary" appearance="solid" @click="editor = {}">
+					<template #leading><Plus :size="15" /></template>{{ t('add') }}
+				</UiButton>
+				<UiButton v-else-if="hasFilters" appearance="soft" @click="clearFilters">
+					{{ t('clearFilters') }}
+				</UiButton>
+			</UiEmptyState>
 		</div>
 	</section>
 	<ConnectionEditor
@@ -251,9 +300,14 @@
 	>
 		<template #footer
 			><UiButton :disabled="deleting" @click="pending = undefined">{{ t('cancel') }}</UiButton
-			><UiButton tone="danger" :loading="deleting" loading-animation="spinner" @click="remove">{{
-				t('delete')
-			}}</UiButton></template
+			><UiButton
+				tone="danger"
+				appearance="solid"
+				:loading="deleting"
+				loading-animation="spinner"
+				@click="remove"
+				>{{ t('delete') }}</UiButton
+			></template
 		>
 	</UiDialog>
 </template>

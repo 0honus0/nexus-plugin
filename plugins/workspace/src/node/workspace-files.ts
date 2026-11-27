@@ -1,7 +1,7 @@
 import { posix } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
-import { writeSftpFile, downloadSftpFile } from './workspace-sftp-streams';
+import { writeSftpFile, downloadSftpFile, readSftpFile } from './workspace-sftp-streams';
 import type { TransferProgress } from './workspace-transfers';
 import type { Readable, Writable } from 'node:stream';
 import type { SFTPWrapper } from 'ssh2';
@@ -13,8 +13,14 @@ import { WorkspaceError } from './workspace-error';
 import { transferWorkspaceFiles, removeWorkspaceTree } from './workspace-file-transfer';
 import type { FileTransfer } from '../shared/workspace-file-operation-types';
 
+const editorWrites = new Map<string, Promise<void>>();
+
 /** One lazily opened SFTP channel per SSH session. File streams have independent cancellation. */
-export function createWorkspaceFiles(connection: SshConnectionApi, onTransfers: (count: number) => void = () => {}) {
+export function createWorkspaceFiles(
+	connection: SshConnectionApi,
+	onTransfers: (count: number) => void = () => {},
+	serverIdentity = connection.id,
+) {
 	let channel: Promise<SFTPWrapper> | undefined;
 	let disposed = false;
 	let transfers = new AbortController();
@@ -49,6 +55,52 @@ export function createWorkspaceFiles(connection: SshConnectionApi, onTransfers: 
 			throw error;
 		}
 		throw new WorkspaceError('WORKSPACE_FILE_EXISTS', 409);
+	}
+
+	async function verifyText(sftp: SFTPWrapper, path: string, expected: string, signal: AbortSignal) {
+		const hash = createHash('sha256');
+		let bytes = 0;
+		for await (const chunk of readSftpFile(sftp, path, { signal })) {
+			bytes += chunk.length;
+			if (bytes > 2 * 1024 * 1024) throw new WorkspaceError('WORKSPACE_CONFLICT', 409);
+			hash.update(chunk);
+		}
+		if (hash.digest('hex') !== expected) throw new WorkspaceError('WORKSPACE_CONFLICT', 409);
+	}
+
+	async function publishEdit(sftp: SFTPWrapper, path: string, temporary: string, hash: string, signal: AbortSignal) {
+		const key = JSON.stringify([serverIdentity, posix.normalize(path)]);
+		const write = (editorWrites.get(key) ?? Promise.resolve()).then(async () => {
+			signal.throwIfAborted();
+			const attrs = await promisify(sftp.lstat.bind(sftp))(path);
+			if (!attrs.isFile()) throw new WorkspaceError('WORKSPACE_CONFLICT', 409);
+			const staged = await promisify(sftp.lstat.bind(sftp))(temporary);
+			if (staged.uid !== attrs.uid || staged.gid !== attrs.gid)
+				await promisify(sftp.chown.bind(sftp))(temporary, attrs.uid, attrs.gid);
+			await promisify(sftp.chmod.bind(sftp))(temporary, attrs.mode & 0o777);
+			await verifyText(sftp, path, hash, signal);
+			signal.throwIfAborted();
+			try {
+				await promisify(sftp.ext_openssh_rename.bind(sftp))(temporary, path);
+			} catch (cause) {
+				if (
+					(cause as { code?: number }).code === 8 ||
+					(cause instanceof Error && cause.message === 'Server does not support this extended request')
+				)
+					throw new WorkspaceError('WORKSPACE_ATOMIC_SAVE_UNAVAILABLE', 501);
+				throw cause;
+			}
+		});
+		const settled = write.catch(() => {});
+		editorWrites.set(key, settled);
+		try {
+			await write;
+		} catch (cause) {
+			if ((cause as { code?: number }).code === 2) throw new WorkspaceError('WORKSPACE_CONFLICT', 409);
+			throw cause;
+		} finally {
+			if (editorWrites.get(key) === settled) editorWrites.delete(key);
+		}
 	}
 
 	async function transfer<T>(signal: AbortSignal, action: (sftp: SFTPWrapper, signal: AbortSignal) => Promise<T>) {
@@ -197,6 +249,7 @@ export function createWorkspaceFiles(connection: SshConnectionApi, onTransfers: 
 			progress?: TransferProgress,
 			size?: number,
 			overwrite = false,
+			expectedHash?: string,
 		) {
 			return transfer(signal, async (sftp, signal) => {
 				if (!overwrite) await absent(sftp, path);
@@ -215,11 +268,16 @@ export function createWorkspaceFiles(connection: SshConnectionApi, onTransfers: 
 					});
 					signal.throwIfAborted();
 					progress?.update({ state: 'committing' });
+					if (expectedHash) {
+						await publishEdit(sftp, path, temporary, expectedHash, signal);
+						return;
+					}
 					if (!overwrite) await absent(sftp, path);
 					else {
 						try {
 							const attrs = await promisify(sftp.lstat.bind(sftp))(path);
 							if (attrs.isDirectory()) throw new WorkspaceError('WORKSPACE_FILE_EXISTS', 409);
+							signal.throwIfAborted();
 							await promisify(sftp.rename.bind(sftp))(path, backup);
 							previous = true;
 						} catch (cause) {
@@ -227,6 +285,7 @@ export function createWorkspaceFiles(connection: SshConnectionApi, onTransfers: 
 						}
 					}
 					try {
+						signal.throwIfAborted();
 						await promisify(sftp.rename.bind(sftp))(temporary, path);
 						published = true;
 					} catch (cause) {

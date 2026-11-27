@@ -1,7 +1,15 @@
 <script setup lang="ts">
 	import { ref, computed, onMounted } from 'vue';
-	import { KeyRound, LockKeyhole, Plus, Search, Trash2, RefreshCw } from '@lucide/vue';
-	import { UiInput, UiButton, UiSelect, UiCard, UiBadge, UiEmptyState, UiDialog } from 'nexus-terminal/browser/ui';
+	import { Ellipsis, KeyRound, LockKeyhole, Pencil, Plus, Search, Trash2, RefreshCw } from '@lucide/vue';
+	import {
+		UiInput,
+		UiButton,
+		UiCard,
+		UiEmptyState,
+		UiDialog,
+		UiDropdownMenu,
+		UiSelect,
+	} from 'nexus-terminal/browser/ui';
 	import type { PluginWindowProps } from 'nexus-terminal/browser';
 	import { useI18n } from 'vue-i18n';
 	import { messages } from './messages.js';
@@ -22,11 +30,21 @@
 		editor = ref<{ credential?: Credential }>(),
 		pending = ref<Credential>(),
 		deleting = ref(false);
-	const types = computed(() => [
-		{ value: 'all', label: t('all') },
+	const typeOptions = computed(() => [
+		{ value: 'all', label: t('allTypes') },
 		{ value: 'password', label: t('passwordType') },
 		{ value: 'privateKey', label: t('privateKeyType') },
 	]);
+	const actions = computed(() => [
+		{ id: 'edit', label: t('edit'), icon: Pencil },
+		{ id: 'delete', label: t('delete'), icon: Trash2, tone: 'danger' as const },
+	]);
+
+	function selectAction(action: string, item: Credential) {
+		if (action === 'edit') editor.value = { credential: item };
+		else if (action === 'delete') pending.value = item;
+	}
+
 	const entries = computed(() =>
 		items.value.filter(
 			(v) =>
@@ -34,6 +52,12 @@
 				[v.name, v.username].some((s) => s.toLowerCase().includes(search.value.trim().toLowerCase())),
 		),
 	);
+
+	function clearFilters() {
+		search.value = '';
+		type.value = 'all';
+	}
+
 	onMounted(refresh);
 
 	async function remove() {
@@ -51,17 +75,24 @@
 </script>
 <template>
 	<section class="credentials-app" data-ui-selection="none">
-		<header class="credentials-toolbar">
-			<div class="credentials-search">
-				<UiInput v-model="search" :placeholder="t('search')" :aria-label="t('search')"
-					><template #leading><Search :size="17" /></template
-				></UiInput>
-			</div>
-			<div class="credentials-filter">
-				<UiSelect v-model="type" :options="types" :aria-label="t('type')" block />
+		<header v-if="!loaded || items.length" class="credentials-toolbar">
+			<div class="credentials-toolbar-filters">
+				<div class="credentials-search">
+					<UiInput v-model="search" :placeholder="t('searchShort')" :aria-label="t('search')"
+						><template #leading><Search :size="16" /></template
+					></UiInput>
+				</div>
+				<UiSelect
+					v-model="type"
+					class="credentials-type-filter"
+					:options="typeOptions"
+					:aria-label="t('type')"
+				/>
 			</div>
 			<div class="credentials-toolbar-actions">
-				<UiButton tone="primary" @click="editor = {}"><Plus :size="17" />{{ t('add') }}</UiButton>
+				<UiButton tone="primary" appearance="solid" @click="editor = {}"
+					><template #leading><Plus :size="15" /></template>{{ t('add') }}</UiButton
+				>
 				<UiButton
 					appearance="ghost"
 					icon-only
@@ -69,15 +100,16 @@
 					loading-animation="icon"
 					:aria-label="t('refresh')"
 					@click="refresh"
-					><RefreshCw :size="17"
+					><RefreshCw :size="16"
 				/></UiButton>
 			</div>
 		</header>
-		<div class="credentials-list" :aria-busy="loading">
+		<div class="credentials-list" :data-first="(loaded && !items.length) || undefined" :aria-busy="loading">
 			<UiCard
 				v-for="item in entries"
 				:key="item.id"
 				class="credentials-card"
+				:data-type="item.type"
 				:title="item.name"
 				:description="item.username"
 				:icon="item.type === 'password' ? LockKeyhole : KeyRound"
@@ -85,24 +117,28 @@
 				@select="editor = { credential: item }"
 			>
 				<template #badge>
-					<UiBadge tone="neutral">{{ t(item.type + 'Type') }}</UiBadge>
+					<span class="credentials-type" :data-type="item.type">{{ t(item.type + 'Type') }}</span>
 				</template>
-				<template #actions
-					><UiButton
-						appearance="ghost"
-						tone="danger"
-						icon-only
-						:aria-label="t('delete') + ' · ' + item.name"
-						@click="pending = item"
-						><Trash2 :size="18" /></UiButton
-				></template>
+				<template #actions>
+					<UiDropdownMenu :items="actions" @select="selectAction($event, item)">
+						<UiButton appearance="ghost" icon-only :aria-label="t('actions') + ' · ' + item.name"
+							><Ellipsis :size="18"
+						/></UiButton>
+					</UiDropdownMenu>
+				</template>
 			</UiCard>
 			<UiEmptyState
+				class="credentials-empty"
 				v-if="loaded && !entries.length"
-				:icon="KeyRound"
+				:icon="items.length ? Search : KeyRound"
 				:title="t(items.length ? 'noResults' : 'empty')"
 				:description="items.length ? '' : t('emptyHint')"
-			/>
+			>
+				<UiButton v-if="!items.length" tone="primary" appearance="solid" @click="editor = {}">
+					<template #leading><Plus :size="15" /></template>{{ t('add') }}
+				</UiButton>
+				<UiButton v-else appearance="soft" @click="clearFilters">{{ t('clearFilters') }}</UiButton>
+			</UiEmptyState>
 		</div>
 	</section>
 	<CredentialEditor
@@ -121,8 +157,8 @@
 		@update:open="(value) => !value && (pending = undefined)"
 		><template #footer
 			><UiButton :disabled="deleting" @click="pending = undefined">{{ t('cancel') }}</UiButton
-			><UiButton tone="danger" :loading="deleting" loading-animation="spinner" @click="remove"
-				><template #leading><Trash2 :size="16" /></template>{{ t('delete') }}</UiButton
+			><UiButton tone="danger" appearance="solid" :loading="deleting" loading-animation="spinner" @click="remove"
+				><template #leading><Trash2 :size="15" /></template>{{ t('delete') }}</UiButton
 			></template
 		></UiDialog
 	>

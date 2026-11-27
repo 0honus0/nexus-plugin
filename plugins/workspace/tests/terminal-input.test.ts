@@ -42,9 +42,9 @@ it('keeps narrow tools out of the initial regions without removing their entry p
 		defaultOpen: false,
 	});
 	expect(presentationProfiles.compact.navigation.items).toContain('files');
-	expect(presentationProfiles.medium.tools).not.toHaveProperty('keyboard');
+	expect(presentationProfiles.wide.tools).not.toHaveProperty('keyboard');
 	expect(presentationProfiles.wide.navigation.placement).toBe('side');
-	expect(presentationProfiles.medium.regions).toEqual(presentationProfiles.wide.regions);
+	expect(presentationProfiles.wide.regions).toEqual(presentationProfiles.compact.regions);
 	expect(encodeTerminalKey('f12', { applicationCursorKeys: false })).toBe('\x1b[24~');
 });
 

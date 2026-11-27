@@ -125,8 +125,7 @@ test(
 		await expect(app.getByText('VNC fixture')).toBeVisible();
 		for (const type of ['SSH', 'RDP', 'VNC']) {
 			const card = app.locator('.connections-card').filter({ hasText: type + ' fixture' });
-			await expect(card.locator('.ui-card__title-line .connections-type')).toHaveText(type);
-			await expect(card.locator('.ui-card__side .ui-card__badge')).toHaveCount(0);
+			await expect(card.getByText(type, { exact: true })).toHaveCount(1);
 			const menu = card.getByRole('button', { name: 'More actions · ' + type + ' fixture' });
 			await expect(menu).toBeVisible();
 			// Read both rectangles in the same browser frame while window motion is active.
@@ -136,13 +135,13 @@ test(
 						(button) => button.getAttribute('aria-label') === label,
 					);
 					if (!action) throw new Error('Missing connection action');
-					const bounds = element.getBoundingClientRect();
+					const bounds = element.querySelector('.connections-type')!.getBoundingClientRect();
 					const menuBounds = action.getBoundingClientRect();
-					return { card: bounds.y + bounds.height / 2, menu: menuBounds.y + menuBounds.height / 2 };
+					return { badge: bounds.y + bounds.height / 2, menu: menuBounds.y + menuBounds.height / 2 };
 				},
 				'More actions · ' + type + ' fixture',
 			);
-			expect(centers.menu).toBeCloseTo(centers.card, 0);
+			expect(centers.menu).toBeCloseTo(centers.badge, 0);
 		}
 		await expect(
 			app.locator('.connections-card').filter({ hasText: 'SSH fixture' }).locator('.connections-tag'),
@@ -168,7 +167,8 @@ test(
 		await expectFormFields(dialog);
 		await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Browser connection');
 		await dialog.getByRole('textbox', { name: 'Host', exact: true }).fill('browser.example.test');
-		await dialog.getByRole('button', { name: 'Add credential', exact: true }).click();
+		await dialog.getByRole('button', { name: 'Use existing', exact: true }).click();
+		await dialog.getByRole('button', { name: 'Manage', exact: true }).click();
 		const manager = page.getByRole('region', { name: 'Credentials', exact: true });
 		await expect(manager).toBeVisible();
 		await expect(dialog).toHaveCount(0);

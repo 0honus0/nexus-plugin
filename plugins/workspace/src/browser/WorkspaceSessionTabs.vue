@@ -5,6 +5,7 @@
 	import type { PluginContextApi, PluginWindowApi } from 'nexus-terminal/browser';
 	import type { SessionInfo } from '../shared/workspace-types';
 	import type { WorkspaceI18n } from './workspace-i18n';
+	import type { FileManagerOpenFile } from './file-manager-api.js';
 	import { createWorkspaceCatalog, workspaceCatalogKey } from './catalog/workspace-catalog';
 	import { createWorkspaceBackground, workspaceBackgroundKey } from './appearance/workspace-background';
 	import { createCommandTargets, commandTargetsKey } from './commands/command-targets';
@@ -16,6 +17,8 @@
 		ctx: PluginContextApi;
 		view: PluginWindowApi;
 		i18n: WorkspaceI18n;
+		filesOnly?: boolean;
+		openFile?: FileManagerOpenFile;
 	}>();
 	const emit = defineEmits<{
 		busy: [id: string, value: boolean];
@@ -40,6 +43,8 @@
 			:session="tab"
 			:host="connections.find((connection) => connection.id === tab.connectionId)?.host"
 			:active="active === tab.id"
+			:files-only="filesOnly"
+			:open-file="openFile"
 			:ctx="ctx"
 			:view="view"
 			:i18n="i18n"

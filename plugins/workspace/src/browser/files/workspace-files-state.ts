@@ -1,6 +1,7 @@
 import { inject, watch, ref, shallowRef, type InjectionKey, type Ref, type ComputedRef } from 'vue';
 import type { SessionInfo } from '../../shared/workspace-types';
 import type { FileClipboard } from '../../shared/workspace-file-operation-types';
+import { workspaceUuid } from '../workspace-uuid';
 
 /** File intent is scoped to one Workspace window, never copied to the OS text clipboard. */
 export function createWorkspaceFilesState(
@@ -29,7 +30,7 @@ export function createWorkspaceFilesState(
 
 		copy(sourceSessionId: string, paths: string[], operation: 'copy' | 'cut') {
 			clipboard.value = {
-				generation: crypto.randomUUID(),
+				generation: workspaceUuid(),
 				sourceSessionId,
 				paths: [...paths],
 				operation,

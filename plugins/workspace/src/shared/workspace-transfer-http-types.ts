@@ -9,6 +9,10 @@ export const TransferFileQuerySchema = z.object({
 	taskId: z.uuid().optional(),
 	batchId: z.uuid().optional(),
 	size: z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+	expectedHash: z
+		.string()
+		.regex(/^[a-f0-9]{64}$/u)
+		.optional(),
 });
 
 export const FileDownloadQuerySchema = FilePathQuerySchema.extend(TransferFileQuerySchema.shape);

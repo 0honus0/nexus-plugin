@@ -17,25 +17,8 @@ export const presentationProfiles = {
 		},
 		navigation: {
 			placement: 'bottom',
-			display: 'icon',
+			display: 'icon-label',
 			items: ['files', 'commands', 'status', 'keyboard'],
-		},
-	},
-	medium: {
-		regions: ['terminal', 'files', 'commands', 'status'],
-		initialRegions: ['terminal', 'status', 'commands', 'files'],
-		primary: 'terminal',
-		direction: 'right',
-		positions: {
-			status: { reference: 'terminal', direction: 'left', width: 0.3 },
-			commands: { reference: 'status', direction: 'below', height: 0.5 },
-			files: { reference: 'terminal', direction: 'below', height: 0.4 },
-		},
-		tools: { themes: { presentation: 'sheet', defaultOpen: false } },
-		navigation: {
-			placement: 'side',
-			display: 'icon',
-			items: [],
 		},
 	},
 	wide: {

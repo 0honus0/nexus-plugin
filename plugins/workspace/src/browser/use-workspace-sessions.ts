@@ -2,6 +2,7 @@ import { ref, shallowRef, computed, onScopeDispose, watch } from 'vue';
 import { PluginHttpError, type PluginContextApi } from 'nexus-terminal/browser';
 import type { PluginWindowApi } from 'nexus-terminal/browser';
 import type { Connection, ConnectionsClientApi } from '@nexus-terminal/connections/connections-client-api';
+import type { CredentialsClientApi } from '@nexus-terminal/credentials/credentials-client-api';
 import {
 	SessionListResponseSchema,
 	SessionCreateResultSchema,
@@ -20,6 +21,7 @@ export function useWorkspaceSessions(props: {
 	prepareSuspend?: (id: string) => Promise<WorkspaceSessionPresentation | undefined>;
 }) {
 	const connections = shallowRef<ConnectionsClientApi>(),
+		credentials = shallowRef<CredentialsClientApi>(),
 		sessions = ref<SessionInfo[]>([]),
 		tabs = ref<SessionInfo[]>([]),
 		active = ref('home'),
@@ -55,10 +57,15 @@ export function useWorkspaceSessions(props: {
 		}
 	}
 
-	const hasTransfers = (id?: string) =>
-		props.hasTransfers?.(id) ||
-		sessions.value.some((s) => (!id || s.id === id) && s.transfers > 0) ||
-		Object.entries(busySessions.value).some(([key, busy]) => (!id || key === id) && busy);
+	function hasTransfers(id?: string): boolean {
+		const owned = id ? [id] : tabs.value.map((tab) => tab.id);
+		return owned.some(
+			(sessionId) =>
+				props.hasTransfers?.(sessionId) ||
+				busySessions.value[sessionId] ||
+				sessions.value.some((session) => session.id === sessionId && session.transfers > 0),
+		);
+	}
 
 	function confirmTransfers(id?: string) {
 		if (!hasTransfers(id)) return Promise.resolve(true);
@@ -138,6 +145,28 @@ export function useWorkspaceSessions(props: {
 		if (!client.loaded.value) void readConnections();
 	});
 
+	const stopCredentials = props.ctx.use({ credentials: ['@nexus-terminal/credentials', 'credentials'] }, (scope) => {
+		const readSignal = AbortSignal.any([signal, scope.signal]);
+		if (readSignal.aborted) return;
+		const client = scope.plugin.credentials;
+
+		function forgetCredentials() {
+			if (credentials.value !== client) return;
+			credentials.value = undefined;
+		}
+
+		readSignal.addEventListener('abort', forgetCredentials, { once: true });
+		scope.onDispose(() => {
+			readSignal.removeEventListener('abort', forgetCredentials);
+			forgetCredentials();
+		});
+		credentials.value = client;
+	});
+
+	const canCreateConnection = computed(() =>
+		readConnectionsState(false, (client) => typeof client.create === 'function'),
+	);
+
 	function retryConnections(): void {
 		void readConnections?.();
 	}
@@ -173,6 +202,7 @@ export function useWorkspaceSessions(props: {
 	);
 	onScopeDispose(() => {
 		stop();
+		stopCredentials();
 		stopState();
 		stopCloseCheck();
 		answer(false);
@@ -366,6 +396,8 @@ export function useWorkspaceSessions(props: {
 
 	return {
 		connections,
+		credentials,
+		canCreateConnection,
 		connectionsLoaded,
 		connectionsReadFailed,
 		retryConnections,
@@ -388,6 +420,7 @@ export function useWorkspaceSessions(props: {
 		confirmOpen,
 		answer,
 		manage,
+		report,
 		start,
 		add,
 		connect,

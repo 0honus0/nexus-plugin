@@ -5,6 +5,7 @@ import type { PluginWindowApi } from 'nexus-terminal/browser';
 import { TransferEventSchema, isTransferFinished, type TransferTask } from '../../shared/workspace-transfer-types';
 import { describeWorkspaceError } from '../workspace-error';
 import { createWorkspaceClient } from '../workspace-client';
+import { workspaceUuid } from '../workspace-uuid';
 import { groupTransferTasks } from './transfer-presentation';
 
 /** One store per Workspace window. Panel visibility and tab changes never own task lifetimes. */
@@ -108,9 +109,9 @@ export function createWorkspaceTransfers(ctx: PluginContextApi, view: PluginWind
 		overwrite = false,
 		destination = '',
 	) {
-		const batchId = crypto.randomUUID();
+		const batchId = workspaceUuid();
 		for (const file of Array.from(files)) {
-			const id = crypto.randomUUID();
+			const id = workspaceUuid();
 			retryFiles.set(id, { file, sessionId, directory });
 			controllers.set(id, new AbortController());
 			tasks.value.push({

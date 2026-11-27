@@ -9,12 +9,16 @@ export class WorkspaceLayoutStorage {
 
 	get(profile: LayoutProfile) {
 		return this.database.withClient(async (client) => {
-			const row = await client
-				.$extendTables<Tables>()
-				.selectFrom('layouts')
-				.select('document')
-				.where('profile', '=', profile)
-				.executeTakeFirst();
+			const db = client.$extendTables<Tables>();
+			const row =
+				(await db.selectFrom('layouts').select('document').where('profile', '=', profile).executeTakeFirst()) ??
+				(profile === 'wide'
+					? await db
+							.selectFrom('layouts')
+							.select('document')
+							.where('profile', '=', 'medium')
+							.executeTakeFirst()
+					: undefined);
 			return row ? WorkspaceLayoutSchema.parse(JSON.parse(row.document)) : null;
 		});
 	}
@@ -24,10 +28,17 @@ export class WorkspaceLayoutStorage {
 		await this.database.withClient((client) =>
 			client
 				.$extendTables<Tables>()
-				.insertInto('layouts')
-				.values({ profile, document })
-				.onConflict((conflict) => conflict.column('profile').doUpdateSet({ document }))
-				.execute(),
+				.transaction()
+				.execute(async (trx) => {
+					await trx
+						.insertInto('layouts')
+						.values({ profile, document })
+						.onConflict((conflict) => conflict.column('profile').doUpdateSet({ document }))
+						.execute();
+					if (profile === 'wide') {
+						await trx.deleteFrom('layouts').where('profile', '=', 'medium').execute();
+					}
+				}),
 		);
 	}
 }

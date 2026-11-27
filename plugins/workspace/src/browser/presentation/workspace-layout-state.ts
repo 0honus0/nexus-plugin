@@ -11,11 +11,14 @@ import { createWorkspaceClient } from '../workspace-client';
 /** One layout per width profile, shared by all windows in this plugin generation. */
 function createLayoutState(ctx: PluginContextApi) {
 	const { request, report } = createWorkspaceClient(ctx, ctx.signal);
-	const values = shallowReactive(new Map<LayoutProfile, { value: WorkspaceLayout; owner?: symbol }>());
+	const values = shallowReactive(
+		new Map<LayoutProfile, { value: WorkspaceLayout; owner?: symbol; structureRevision: number }>(),
+	);
 	const reads = new Map<LayoutProfile, Promise<void>>();
 	const loaded = new Set<LayoutProfile>();
 	const pending = new Map<LayoutProfile, WorkspaceLayout>();
 	const sessions = new Map<string, () => WorkspaceSessionPresentation>();
+	let nextStructureRevision = 1;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let saving = Promise.resolve();
 
@@ -33,7 +36,8 @@ function createLayoutState(ctx: PluginContextApi) {
 					);
 					if (ctx.signal.aborted) return;
 					loaded.add(profile);
-					if (raw && !values.has(profile)) values.set(profile, { value: raw });
+					if (raw && !values.has(profile))
+						values.set(profile, { value: raw, structureRevision: nextStructureRevision++ });
 				} catch (cause) {
 					report(cause);
 				} finally {
@@ -45,9 +49,12 @@ function createLayoutState(ctx: PluginContextApi) {
 		await reading;
 	}
 
-	function update(profile: LayoutProfile, value: WorkspaceLayout, owner: symbol) {
-		if (ctx.signal.aborted || JSON.stringify(values.get(profile)?.value) === JSON.stringify(value)) return;
-		values.set(profile, { value, owner });
+	function update(profile: LayoutProfile, value: WorkspaceLayout, owner: symbol, structureChanged = true) {
+		if (ctx.signal.aborted) return;
+		const previous = values.get(profile);
+		if (JSON.stringify(previous?.value) === JSON.stringify(value)) return;
+		const structureRevision = structureChanged || !previous ? nextStructureRevision++ : previous.structureRevision;
+		values.set(profile, { value, owner, structureRevision });
 		pending.set(profile, value);
 		clearTimeout(timer);
 		timer = setTimeout(() => ctx.app.tasks.background('save-workspace-layout', flush), 350);
@@ -89,7 +96,7 @@ function createLayoutState(ctx: PluginContextApi) {
 						);
 						if (ctx.signal.aborted || values.get(profile)?.value !== value) continue;
 						loaded.add(profile);
-						if (raw) values.set(profile, { value: raw });
+						if (raw) values.set(profile, { value: raw, structureRevision: nextStructureRevision++ });
 						else values.delete(profile);
 					} catch (readError) {
 						if (!ctx.signal.aborted) {

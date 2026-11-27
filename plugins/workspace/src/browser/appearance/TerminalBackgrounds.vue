@@ -2,7 +2,7 @@
 	import { WorkspaceModuleError } from '../workspace-error';
 
 	import { computed, ref, useId } from 'vue';
-	import { Image, Upload, Trash2, Plus, Check, Pencil, Download, Sparkles, Code } from '@lucide/vue';
+	import { Image, Upload, Trash2, Plus, Check, Pencil, Download, Sparkles } from '@lucide/vue';
 	import {
 		UiButton,
 		UiSwitch,
@@ -22,11 +22,11 @@
 	} from '../../shared/workspace-background-types';
 	import { terminalBackgroundPresets } from '../../shared/terminal-background-presets';
 	import { useWorkspaceBackground } from './workspace-background';
-	import TerminalBackgroundLayer from './TerminalBackgroundLayer.vue';
+	import BackgroundPresetPreview from './BackgroundPresetPreview.vue';
 	const props = defineProps<{ i18n: WorkspaceI18n; active: boolean }>();
 	const { t, n } = props.i18n;
 	const background = useWorkspaceBackground();
-	const { settings, state, imageUrl, html, animated, windowVisible, loaded, busy, overlayPreview } = background;
+	const { settings, state, imageUrl, animated, windowVisible, loaded, busy, overlayPreview } = background;
 	const imageInput = ref<HTMLInputElement>(),
 		htmlInput = ref<HTMLInputElement>();
 	const controlsId = useId();
@@ -123,19 +123,13 @@
 					@update:model-value="background.patch({ animation: $event })"
 			/></label>
 		</div>
-		<div class="workspace-background-preview">
-			<TerminalBackgroundLayer
-				:settings="settings"
-				:image-url="imageUrl"
-				:html="html"
-				:animated="animated"
-				:active="active && windowVisible"
-			/>
-			<div class="workspace-background-preview-copy">
-				<span>{{ t('background.preview') }}</span><strong>nexus ~</strong><code>$ echo hello</code>
-			</div>
-		</div>
 		<div class="workspace-background-image-tools">
+			<span
+				v-if="imageUrl"
+				class="workspace-background-image-thumb"
+				:style="{ backgroundImage: `url(${JSON.stringify(imageUrl)})`, backgroundSize: settings.fit }"
+				aria-hidden="true"
+			/>
 			<UiButton :loading="busy" :disabled="!loaded" @click="imageInput?.click()"
 				><Upload :size="15" />{{ t('background.uploadImage') }}</UiButton
 			>
@@ -220,7 +214,7 @@
 		</div>
 		<div class="workspace-background-preset-grid">
 			<article
-				v-for="(item, index) in presets"
+				v-for="item in presets"
 				:key="item.id"
 				class="workspace-background-preset"
 				:class="{ 'is-active': settings.preset === item.id }"
@@ -232,39 +226,52 @@
 					:aria-label="t('background.apply', { name: item.name })"
 					@click="background.patch({ preset: item.id, enabled: true })"
 				>
-					<span class="workspace-background-preset-art" :data-variant="index % 4"
-						><Code v-if="item.version" :size="23" /><Sparkles v-else :size="23"
-					/></span>
+					<BackgroundPresetPreview
+						:settings="settings"
+						:image-url="imageUrl"
+						:html="item.html"
+						:animated="animated"
+						:active="active && windowVisible"
+						:selected="settings.preset === item.id"
+					/>
 					<span
-						><strong>{{ item.name }}</strong
-						><small>{{ t(item.version ? 'background.custom' : 'background.builtin') }}</small></span
-					><Check v-if="settings.preset === item.id" :size="16" />
+						v-if="settings.preset === item.id"
+						class="workspace-background-preset-check"
+						aria-hidden="true"
+						><Check :size="13" :stroke-width="2.4"
+					/></span>
 				</button>
-				<div class="workspace-background-preset-actions">
-					<UiButton
-						appearance="ghost"
-						icon-only
-						:aria-label="t(item.version ? 'tools.editNamed' : 'tools.copyNamed', { name: item.name })"
-						:disabled="busy"
-						@click="edit(item)"
-						><Pencil :size="14"
-					/></UiButton>
-					<UiButton
-						appearance="ghost"
-						icon-only
-						:aria-label="t('background.export', { name: item.name })"
-						@click="download(item)"
-						><Download :size="14"
-					/></UiButton>
-					<UiButton
-						v-if="item.version"
-						appearance="ghost"
-						icon-only
-						:aria-label="t('tools.removeNamed', { name: item.name })"
-						:disabled="busy"
-						@click="background.removePreset(item)"
-						><Trash2 :size="14"
-					/></UiButton>
+				<div class="workspace-background-preset-footer">
+					<div class="workspace-background-preset-meta">
+						<strong :title="item.name">{{ item.name }}</strong>
+						<small>{{ t(item.version ? 'background.custom' : 'background.builtin') }}</small>
+					</div>
+					<div class="workspace-background-preset-actions">
+						<UiButton
+							appearance="ghost"
+							icon-only
+							:aria-label="t(item.version ? 'tools.editNamed' : 'tools.copyNamed', { name: item.name })"
+							:disabled="busy"
+							@click="edit(item)"
+							><Pencil :size="14"
+						/></UiButton>
+						<UiButton
+							appearance="ghost"
+							icon-only
+							:aria-label="t('background.export', { name: item.name })"
+							@click="download(item)"
+							><Download :size="14"
+						/></UiButton>
+						<UiButton
+							v-if="item.version"
+							appearance="ghost"
+							icon-only
+							:aria-label="t('tools.removeNamed', { name: item.name })"
+							:disabled="busy"
+							@click="background.removePreset(item)"
+							><Trash2 :size="14"
+						/></UiButton>
+					</div>
 				</div>
 			</article>
 		</div>

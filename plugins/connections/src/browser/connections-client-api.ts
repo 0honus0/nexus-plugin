@@ -5,8 +5,10 @@ import { z } from 'zod';
 import { ConnectionCatalogResponseSchema } from '../shared/connection-http-types.js';
 import {
 	ConnectionEditorRequestSchema,
+	ConnectionInputSchema,
 	ConnectionSchema,
 	ConnectionsRevisionSchema,
+	type Connection,
 	type ConnectionCatalog,
 	type ConnectionInput,
 	type ConnectionEditorRequest,
@@ -21,12 +23,18 @@ export type {
 	Tag,
 } from '../shared/connection-types.js';
 
+export interface ConnectionCreateOptions {
+	readonly view?: PluginViewApi;
+	readonly signal?: AbortSignal;
+}
+
 export interface ConnectionsClientApi {
 	readonly catalog: Readonly<Ref<ConnectionCatalog>>;
 	readonly loaded: Readonly<Ref<boolean>>;
 	refresh(signal?: AbortSignal): Promise<void>;
 	openManager(): void;
 	openEditor(request: ConnectionEditorRequest, signal?: AbortSignal): Promise<void>;
+	create(input: ConnectionInput, options?: ConnectionCreateOptions): Promise<Connection>;
 }
 
 declare module 'nexus-terminal/browser' {
@@ -163,31 +171,46 @@ export class ConnectionsClient implements ConnectionsClientApi {
 		const code =
 			cause instanceof PluginHttpError
 				? cause.code
-				: cause instanceof Error && /^CONNECTIONS_[A-Z_]+$/u.test(cause.message)
+				: cause instanceof Error && /^(?:CONNECTIONS|CREDENTIALS)_[A-Z_]+$/u.test(cause.message)
 					? cause.message
 					: 'CONNECTIONS_OPERATION_FAILED';
 		this.#context.app.log.report({ level: 'error', code, userVisible });
 	}
 
-	save(connection: ConnectionInput, id: string | undefined, view: PluginViewApi) {
+	async create(input: ConnectionInput, options?: ConnectionCreateOptions): Promise<Connection> {
+		const parsed = ConnectionInputSchema.safeParse(input);
+		if (!parsed.success)
+			throw Object.assign(new Error('CONNECTIONS_INVALID_REQUEST'), { code: 'CONNECTIONS_INVALID_REQUEST' });
+		const created = await this.save(parsed.data, undefined, options?.view, options?.signal);
+		// 立即同步本地目录，调用方在保存后即可直接基于返回 ID 发起连接。
+		this.#catalog.value = {
+			...this.#catalog.value,
+			connections: [...this.#catalog.value.connections.filter(({ id }) => id !== created.id), created],
+		};
+		this.#loaded.value = true;
+		void this.refresh().catch((cause) => this.report(cause, undefined, false));
+		return created;
+	}
+
+	save(connection: ConnectionInput, id: string | undefined, view?: PluginViewApi, signal?: AbortSignal) {
 		return this.#context.app.tasks.run(
-			async (signal) => {
+			async (activeSignal) => {
 				const result = await this.#context.app.http.json(
 					id ? '/connections/' + encodeURIComponent(id) : '/connections',
 					ConnectionSchema,
 					{
 						method: id ? 'PUT' : 'POST',
-						signal,
+						signal: activeSignal,
 						headers: { 'content-type': 'application/json' },
 						body: JSON.stringify({ connection }),
 					},
 				);
-				signal.throwIfAborted();
+				activeSignal.throwIfAborted();
 				this.#generation++;
 				this.#context.app.log.report({ level: 'info', code: 'CONNECTION_SAVED', userVisible: true });
 				return result;
 			},
-			{ view },
+			{ view, signal },
 		);
 	}
 

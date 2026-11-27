@@ -17,7 +17,6 @@
 	const { context, view } = defineProps<PluginWindowProps>();
 	const { t } = useI18n({ useScope: 'local', messages });
 	const issuerId = useId();
-	const bindingHintId = useId();
 	const status = ref<Awaited<ReturnType<typeof loadStatus>>>();
 	const form = ref<OidcBindingInput>(blankForm());
 	const working = ref(false);
@@ -34,11 +33,10 @@
 	const redirects = computed(() => {
 		const origin = OidcOriginSchema.safeParse(form.value.origin);
 		return [
-			{ label: 'callback', hint: 'callbackHint', path: status.value?.callbackPath },
-			{ label: 'bindingCallback', hint: 'bindingCallbackHint', path: oidcBindingCallbackPath },
-		].map(({ label, hint, path }) => ({
+			{ label: 'callback', path: status.value?.callbackPath },
+			{ label: 'bindingCallback', path: oidcBindingCallbackPath },
+		].map(({ label, path }) => ({
 			label,
-			hint,
 			uri: origin.success && status.value && path ? new URL(path, origin.data).href : '',
 		}));
 	});
@@ -217,20 +215,8 @@
 			<UiField :label="t('origin')" v-slot="{ id }">
 				<UiInput :id="id" v-model="form.origin" type="url" :disabled="formDisabled" required />
 			</UiField>
-			<UiField
-				v-for="redirect in redirects"
-				:key="redirect.label"
-				:label="t(redirect.label)"
-				:hint="t(redirect.hint)"
-				v-slot="{ id, describedby }"
-			>
-				<UiInput
-					:id="id"
-					:model-value="redirect.uri"
-					:aria-describedby="describedby"
-					:disabled="!redirect.uri"
-					readonly
-				>
+			<UiField v-for="redirect in redirects" :key="redirect.label" :label="t(redirect.label)" v-slot="{ id }">
+				<UiInput :id="id" :model-value="redirect.uri" :disabled="!redirect.uri" readonly>
 					<template #trailing>
 						<UiButton
 							appearance="ghost"
@@ -247,7 +233,6 @@
 			</UiField>
 		</UiSection>
 		<div class="oidc-save">
-			<p :id="bindingHintId">{{ t('bindHint') }}</p>
 			<UiButton v-if="!status && !reading" type="button" block @click="refreshStatus">{{ t('retry') }}</UiButton>
 			<UiButton
 				v-else
@@ -255,7 +240,6 @@
 				tone="primary"
 				block
 				loading-animation="spinner"
-				:aria-describedby="bindingHintId"
 				:loading="binding"
 				:disabled="formDisabled || !bindingInput.success"
 			>
@@ -304,13 +288,6 @@
 	.oidc-save {
 		display: grid;
 		gap: 10px;
-	}
-
-	.oidc-save p {
-		margin: 0;
-		color: var(--ui-muted);
-		font-size: 12px;
-		line-height: 1.7;
 	}
 
 	@container (max-width: 32rem) {

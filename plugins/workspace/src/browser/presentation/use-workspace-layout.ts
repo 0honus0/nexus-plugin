@@ -19,7 +19,7 @@ import type { SessionInfo } from '../../shared/workspace-types';
 import type { WorkspaceI18n } from '../workspace-i18n';
 import { createWorkspaceClient } from '../workspace-client';
 import { workspaceLayoutStateKey } from './workspace-layout-state';
-import { dockSizes, dockStructure, withDockSizes } from './dock-layout';
+import { dockSizes, dockStructure, sameDockSizes, withDockSizes } from './dock-layout';
 
 export function useWorkspaceLayout(props: {
 	ctx: PluginContextApi;
@@ -86,7 +86,9 @@ export function useWorkspaceLayout(props: {
 		disposed = false;
 	let currentProfile: LayoutProfile | undefined;
 	let currentStructure: string | undefined;
-	let appliedLayout: WorkspaceLayout | undefined;
+	let currentSizes: Record<string, number> = {};
+	let lastGridBounds = { width: 0, height: 0 };
+	let appliedStructureRevision: number | undefined;
 	const subscriptions: ReturnType<DockviewApi['onDidLayoutChange']>[] = [];
 	const panelSubscriptions = new Map<string, ReturnType<DockviewApi['onDidLayoutChange']>>();
 
@@ -109,7 +111,7 @@ export function useWorkspaceLayout(props: {
 		);
 	}
 
-	function capture() {
+	function capture(force = false) {
 		if (
 			!api.value ||
 			!api.value.width ||
@@ -122,13 +124,18 @@ export function useWorkspaceLayout(props: {
 			return;
 		try {
 			const dock = api.value.toJSON();
+			const sizes = dockSizes(dock);
+			const gridResized = dock.grid.width !== lastGridBounds.width || dock.grid.height !== lastGridBounds.height;
+			lastGridBounds = { width: dock.grid.width, height: dock.grid.height };
 			presentation[currentProfile] = {
-				sizes: { ...presentation[currentProfile]?.sizes, ...dockSizes(dock) },
+				sizes: { ...presentation[currentProfile]?.sizes, ...sizes },
 				scales: { ...scales },
 			};
 			const tools = rememberedTools(currentProfile);
 			const structure = dockStructure(dock, tools);
-			if (structure === currentStructure) return;
+			const structureChanged = structure !== currentStructure;
+			const sizesChanged = !gridResized && !sameDockSizes(sizes, currentSizes);
+			if (!force && !structureChanged && !sizesChanged) return;
 			const value = WorkspaceLayoutSchema.parse({
 				version: 4,
 				scales: shared.values.get(currentProfile)?.value.scales,
@@ -137,8 +144,9 @@ export function useWorkspaceLayout(props: {
 				dock,
 			});
 			currentStructure = structure;
-			shared.update(currentProfile, value, owner);
-			appliedLayout = shared.values.get(currentProfile)?.value;
+			currentSizes = sizes;
+			shared.update(currentProfile, value, owner, force || structureChanged);
+			appliedStructureRevision = shared.values.get(currentProfile)?.structureRevision;
 		} catch (cause) {
 			report(cause);
 		}
@@ -201,16 +209,19 @@ export function useWorkspaceLayout(props: {
 	async function restore() {
 		if (!api.value || disposed || !props.active || !viewport.width || !viewport.height) return;
 		const target = profile.value;
-		if (loaded.value && currentProfile === target && appliedLayout === shared.values.get(target)?.value) return;
+		const existingEntry = shared.values.get(target);
+		if (loaded.value && currentProfile === target && appliedStructureRevision === existingEntry?.structureRevision)
+			return;
 		const token = ++generation;
 		loaded.value = false;
 		restoring = true;
 		await shared.load(target);
-		const saved = shared.values.get(target)?.value;
+		const entry = shared.values.get(target);
+		const saved = entry?.value;
 
 		if (disposed || token !== generation || !props.active) return;
 		currentProfile = target;
-		appliedLayout = saved;
+		appliedStructureRevision = entry?.structureRevision;
 		const local = presentation[target];
 		for (const id of Object.keys(scales) as WorkspacePane[]) delete scales[id];
 		Object.assign(scales, local?.scales ?? saved?.scales ?? {});
@@ -257,7 +268,12 @@ export function useWorkspaceLayout(props: {
 		api.value.updateOptions({ locked: false, disableDnd: locked.value });
 		visible();
 		syncConstraints();
-		currentStructure = dockStructure(api.value.toJSON(), rememberedTools(target));
+		const snapshot = api.value.toJSON();
+		currentStructure = dockStructure(snapshot, rememberedTools(target));
+		currentSizes = dockSizes(snapshot);
+		lastGridBounds = { width: snapshot.grid.width, height: snapshot.grid.height };
+		// 首次恢复后记录本终端独立的初始分屏比例，避免后续其他终端仅调整大小时覆盖当前终端。
+		presentation[target] ??= { sizes: { ...currentSizes }, scales: { ...scales } };
 		restoring = false;
 		loaded.value = true;
 	}
@@ -331,7 +347,8 @@ export function useWorkspaceLayout(props: {
 	watch(
 		() => shared.values.get(profile.value),
 		(entry) => {
-			if (entry?.owner !== owner && props.active) void restore();
+			if (entry?.owner !== owner && entry?.structureRevision !== appliedStructureRevision && props.active)
+				void restore();
 		},
 	);
 	watch(
@@ -357,7 +374,7 @@ export function useWorkspaceLayout(props: {
 		if (currentProfile) delete presentation[currentProfile];
 		defaults();
 		restoring = false;
-		capture();
+		capture(true);
 	}
 
 	function togglePane(id: WorkspacePane) {

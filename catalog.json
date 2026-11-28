@@ -1839,5 +1839,58 @@
         ]
       }
     ]
+  },
+  {
+    "id": "@nexus-terminal/remote-desktop",
+    "versions": [
+      {
+        "package": {
+          "name": "@nexus-terminal/remote-desktop",
+          "version": "0.0.1",
+          "type": "module",
+          "description": "RDP and VNC with native browser clients or a Guacamole gateway",
+          "displayName": "Remote Desktop",
+          "files": [
+            "dist"
+          ],
+          "peerDependencies": {
+            "nexus-terminal": "^1.2.0"
+          },
+          "engines": {
+            "node": ">=26.13.1"
+          },
+          "nexus": {
+            "kind": "application",
+            "icon": "monitor",
+            "entry": {
+              "backend": "dist/node/index.js",
+              "frontend": "dist/browser/index.js"
+            },
+            "dependsOn": {
+              "@nexus-terminal/connections": "^0.0.1",
+              "@nexus-terminal/credentials": "^0.0.1"
+            },
+            "i18n": {
+              "zh-CN": {
+                "displayName": "远程桌面",
+                "description": "使用原生或 Guacamole 模式连接 RDP 和 VNC"
+              }
+            }
+          },
+          "scripts": {
+            "build": "node ../../scripts/build-plugin.mjs",
+            "test:setup": "playwright install --with-deps chromium",
+            "typecheck": "vue-tsc -p tsconfig.json --noEmit",
+            "test": "pnpm build && tsx --test tests/*.test.ts"
+          }
+        },
+        "distributions": [
+          {
+            "tarball": "https://github.com/0honus0/nexus-plugin/releases/download/remote-desktop/v0.0.1/remote-desktop-0.0.1.tgz",
+            "integrity": "sha512-M0esicJIMuLnjWpucaELiqCp0KGIuKuUyqFlyd4O4Dlv6t1LJEkJH3/SO9jdMox1AnhJu7cLlUOiZMm5i6CIqQ=="
+          }
+        ]
+      }
+    ]
   }
 ]

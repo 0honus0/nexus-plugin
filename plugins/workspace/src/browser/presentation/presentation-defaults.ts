@@ -8,6 +8,7 @@ export const presentationProfiles = {
 		initialRegions: ['terminal'],
 		primary: 'terminal',
 		direction: 'below',
+		defaultScales: { status: 1.2 },
 		tools: {
 			files: { presentation: 'sheet', defaultOpen: false },
 			commands: { presentation: 'sheet', defaultOpen: false },
@@ -17,7 +18,6 @@ export const presentationProfiles = {
 		},
 		navigation: {
 			placement: 'bottom',
-			display: 'icon-label',
 			items: ['files', 'commands', 'status', 'keyboard'],
 		},
 	},
@@ -34,7 +34,6 @@ export const presentationProfiles = {
 		tools: { themes: { presentation: 'sheet', defaultOpen: false } },
 		navigation: {
 			placement: 'side',
-			display: 'icon',
 			items: [],
 		},
 	},

@@ -523,7 +523,7 @@
 			</UiField>
 		</form>
 		<template #footer
-			><UiButton appearance="ghost" :disabled="saving" @click="emit('close')">{{ t('cancel') }}</UiButton
+			><UiButton appearance="soft" :disabled="saving" @click="emit('close')">{{ t('cancel') }}</UiButton
 			><UiButton
 				:form="formId"
 				type="submit"

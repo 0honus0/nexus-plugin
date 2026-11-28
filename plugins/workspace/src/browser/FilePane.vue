@@ -11,6 +11,7 @@
 		Eye,
 		EyeOff,
 		ListFilter,
+		ZoomIn,
 		RefreshCw,
 		Upload,
 		Download,
@@ -48,6 +49,7 @@
 	import { usePanePresentation } from './presentation/pane-presentation';
 	import { createWorkspaceClient } from './workspace-client';
 	import { useFiles } from './use-files';
+	import { usePinchZoom } from '../../../../shared/browser/use-pinch-zoom.mjs';
 	const props = defineProps<{
 		sessionId: string;
 		enabled: boolean;
@@ -89,7 +91,15 @@
 		searchExpanded = ref(false),
 		showHidden = ref(false),
 		sort = ref('name');
-	const { style: fileScaleStyle } = usePanePresentation(surface, filesPresentation);
+	const { scale: fileScale, style: fileScaleStyle, inputScale } = usePanePresentation(surface, filesPresentation);
+	const zoomItems = computed<UiMenuItem[]>(() =>
+		[65, 80, 100, 125, 150, 160].map((percent) => ({
+			id: String(percent),
+			label: `${percent}%`,
+			disabled: Math.round(fileScale.value * 100) === percent,
+		})),
+	);
+	usePinchZoom(surface, inputScale.beginPinch, inputScale.pinch);
 	const textClipboard = useClipboard({ legacy: true });
 	const selected = ref<string[]>([]),
 		anchor = ref(''),
@@ -541,6 +551,7 @@
 		ref="surface"
 		class="workspace-files"
 		:data-files-only="filesOnly || undefined"
+		:style="{ '--workspace-file-scale': fileScale }"
 		:aria-label="t('files')"
 		tabindex="0"
 		@keydown="shortcut"
@@ -611,6 +622,15 @@
 							><UiButton appearance="ghost" icon-only :aria-label="t('sortFiles')" :title="t('sortFiles')"
 								><ListFilter :size="16" /></UiButton
 						></UiDropdownMenu>
+						<UiDropdownMenu :items="zoomItems" @select="inputScale.setScale(Number($event) / 100)">
+							<UiButton
+								appearance="ghost"
+								icon-only
+								:aria-label="t('fileZoom', { percent: Math.round(fileScale * 100) })"
+								:title="t('fileZoom', { percent: Math.round(fileScale * 100) })"
+								><ZoomIn :size="16"
+							/></UiButton>
+						</UiDropdownMenu>
 						<UiButton
 							appearance="ghost"
 							icon-only
@@ -838,6 +858,12 @@
 		padding: 4px 15px;
 		color: var(--ui-muted);
 		font-size: 11px;
+	}
+	.workspace-file-status > span {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.workspace-file-status-search {
 		--workspace-control-height: 28px;

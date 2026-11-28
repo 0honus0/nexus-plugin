@@ -115,6 +115,7 @@
 		:title="t('transferCenter.title')"
 		:close-label="t('transferCenter.hide')"
 		:close-on-interact-outside="narrow"
+		:transition-preset="narrow ? 'sheet' : undefined"
 		class="workspace-transfer-center"
 		:data-narrow="narrow"
 		@update:open="transfers.open.value = $event"
@@ -328,6 +329,7 @@
 		padding-bottom: env(safe-area-inset-bottom);
 		border-bottom: 0;
 		border-radius: 25px 25px 0 0;
+		box-shadow: 0 -6px 24px #10132326;
 	}
 	.workspace-transfer-handle {
 		display: flex;

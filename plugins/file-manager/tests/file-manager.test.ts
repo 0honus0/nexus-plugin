@@ -136,6 +136,9 @@ test(
 		await expect(json.locator('.view-lines')).toContainText('"project"');
 		await expect(json.locator('.monaco-editor')).toHaveClass(/\bvs-dark\b/);
 		await expect(json.locator('.view-lines')).toHaveCSS('font-size', '14px');
+		await json.getByRole('button', { name: 'Zoom · 100%', exact: true }).click();
+		await page.getByRole('menuitem', { name: 'Zoom in', exact: true }).click();
+		await expect(json.locator('.view-lines')).toHaveCSS('font-size', '15.4px');
 		await expect(json.locator('.codicon-folding-expanded').first()).toHaveCSS('opacity', '1');
 		await json.locator('.codicon-folding-expanded').first().click();
 		await expect(json.locator('.view-lines')).not.toContainText('"name"');
@@ -151,6 +154,25 @@ test(
 		await json.locator('.view-lines').click();
 		await page.keyboard.insertText('read-only-check');
 		await expect(json.locator('.view-lines')).not.toContainText('read-only-check');
+		await page.setViewportSize({ width: 320, height: 800 });
+		const footer = json.locator('.file-preview__footer');
+		const more = footer.getByRole('button', { name: 'More file actions' });
+		await expect(more).toBeVisible();
+		await expect(footer.getByRole('combobox', { name: 'File encoding' })).toBeInViewport();
+		const singleRow = await footer.evaluate((element) => {
+			const [info, tools] = Array.from(element.children, (child) => child.getBoundingClientRect());
+			return Math.abs(info.top + info.height / 2 - tools.top - tools.height / 2) < 1;
+		});
+		assert.ok(singleRow);
+		await more.click();
+		await expect(page.getByRole('menuitem', { name: 'Download' })).toBeVisible();
+		await page.getByRole('menuitem', { name: 'Reset zoom · 110%', exact: true }).click();
+		await expect(json.locator('.view-lines')).toHaveCSS('font-size', '14px');
+		await more.click();
+		await page.getByRole('menuitem', { name: 'Find in file' }).click();
+		await expect(find).toBeFocused();
+		await find.press('Escape');
+		await page.setViewportSize({ width: 1440, height: 900 });
 		await page
 			.locator('.application-window')
 			.filter({ has: json })

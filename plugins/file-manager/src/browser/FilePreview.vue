@@ -1,18 +1,24 @@
 <script setup lang="ts">
 	import { computed, defineAsyncComponent, onScopeDispose, ref, watch } from 'vue';
+	import { useEventListener } from '@vueuse/core';
 	import { useI18n } from 'vue-i18n';
 	import {
 		ArrowDownToLine,
 		ChevronLeft,
 		ChevronRight,
+		Columns2,
+		Ellipsis,
+		Eye,
 		Maximize,
 		Minus,
+		Pencil,
 		Plus,
 		RotateCw,
 		Save,
 		Search,
+		ZoomIn,
 	} from '@lucide/vue';
-	import { UiButton, UiDialog, UiSelect } from 'nexus-terminal/browser/ui';
+	import { UiButton, UiDialog, UiDropdownMenu, UiSelect } from 'nexus-terminal/browser/ui';
 	import { sha256 } from '@noble/hashes/sha2.js';
 	import { bytesToHex } from '@noble/hashes/utils.js';
 	import Papa from 'papaparse';
@@ -27,6 +33,8 @@
 		type EncodingChoice,
 	} from './text-encoding.js';
 
+	import { usePinchZoom } from '../../../../shared/browser/use-pinch-zoom.mjs';
+
 	const CodeEditor = defineAsyncComponent(() => import('./CodeEditor.vue'));
 	const props = defineProps<{ tab: PreviewDocument; signal: AbortSignal }>();
 	const { locale } = useI18n({ useScope: 'global' });
@@ -36,8 +44,14 @@
 	);
 	const objectUrl = ref('');
 	const imageSize = ref<{ width: number; height: number }>();
-	const zoom = ref<number | 'fit'>('fit');
-	const imageFrame = ref<HTMLElement>();
+	const zoom = ref<number | 'fit'>(props.tab.format.kind === 'image' ? 'fit' : 100);
+	const zoomFrame = ref<HTMLElement>();
+	const percent = computed(() => (typeof zoom.value === 'number' ? zoom.value : 100));
+	const editorFontSize = computed(() => (14 * percent.value) / 100);
+	const zoomable = computed(
+		() => state.value === 'ready' && (props.tab.format.kind === 'image' ? !!imageSize.value : !!props.tab.text),
+	);
+	const zoomLimits = props.tab.format.kind === 'image' ? { min: 5, max: 400 } : { min: 50, max: 250 };
 	const saveStatus = ref<
 		| 'saved'
 		| 'saveFailed'
@@ -85,6 +99,54 @@
 	const modeOptions = computed(() =>
 		props.tab.format.kind === 'markdown' ? (['preview', 'split', 'edit'] as const) : (['preview', 'edit'] as const),
 	);
+	const modeIcons = { preview: Eye, split: Columns2, edit: Pencil };
+	const zoomLabel = computed(() => (zoom.value === 'fit' ? copy.value.fit : zoom.value + '%'));
+	const zoomActions = computed(() => [
+		{ id: 'zoomOut', label: copy.value.zoomOut, icon: Minus, disabled: zoom.value === zoomLimits.min },
+		{ id: 'zoomIn', label: copy.value.zoomIn, icon: Plus, disabled: zoom.value === zoomLimits.max },
+		{
+			id: 'actualSize',
+			label: imageSize.value ? copy.value.actualSize : copy.value.resetZoom,
+			icon: ZoomIn,
+			disabled: zoom.value === 100,
+		},
+		...(imageSize.value
+			? [{ id: 'fit', label: copy.value.fit, icon: Maximize, disabled: zoom.value === 'fit' }]
+			: []),
+	]);
+	const fileActions = computed(() => [
+		...(editor.value && editorVisible.value && state.value === 'ready'
+			? [{ id: 'find', label: copy.value.find, icon: Search, disabled: !codeEditor.value }]
+			: []),
+		{
+			id: 'refresh',
+			label: copy.value.refresh,
+			icon: RotateCw,
+			disabled: state.value === 'loading' || props.tab.saving,
+		},
+		{ id: 'download', label: copy.value.download, icon: ArrowDownToLine },
+	]);
+
+	const mobileActions = computed(() => [
+		...fileActions.value,
+		...(zoomable.value
+			? zoomActions.value.map((action) => ({
+					...action,
+					label: action.id === 'actualSize' ? `${action.label} · ${zoomLabel.value}` : action.label,
+					separatorBefore: action.id === 'zoomOut',
+				}))
+			: []),
+	]);
+
+	function runFileAction(id: string) {
+		if (id === 'find') codeEditor.value?.openSearch();
+		else if (id === 'refresh') reload();
+		else if (id === 'download') download();
+		else if (id === 'zoomIn') setZoom(currentZoom() + (imageSize.value ? 25 : 10));
+		else if (id === 'zoomOut') setZoom(currentZoom() - (imageSize.value ? 25 : 10));
+		else if (id === 'actualSize') setZoom(100);
+		else if (id === 'fit' && imageSize.value) zoom.value = 'fit';
+	}
 
 	watch([source, () => props.tab.mode], () => {
 		if (saveStatus.value === 'saved') saveStatus.value = undefined;
@@ -113,7 +175,6 @@
 		columnPage.value = 0;
 		releaseObject();
 		imageSize.value = undefined;
-		zoom.value = 'fit';
 		try {
 			const bytes = await file.read(format.maxBytes, signal);
 			if (signal.aborted) return;
@@ -214,18 +275,46 @@
 		imageSize.value = { width: img.naturalWidth, height: img.naturalHeight };
 	}
 
-	function changeZoom(step: number) {
+	function currentZoom() {
 		const size = imageSize.value;
-		const frame = imageFrame.value;
-		if (!size || !frame) return;
-		const fit = Math.min(
-			1,
-			Math.max(0, frame.clientWidth - 32) / size.width,
-			Math.max(0, frame.clientHeight - 32) / size.height,
+		const frame = zoomFrame.value;
+		if (typeof zoom.value === 'number' || !size || !frame) return percent.value;
+		return (
+			100 *
+			Math.min(
+				1,
+				Math.max(0, frame.clientWidth - 32) / size.width,
+				Math.max(0, frame.clientHeight - 32) / size.height,
+			)
 		);
-		const current = zoom.value === 'fit' ? Math.round(fit * 100) : zoom.value;
-		zoom.value = Math.max(5, Math.min(400, current + step));
 	}
+
+	function setZoom(value: number) {
+		if (!zoomable.value) return;
+		zoom.value = Math.max(zoomLimits.min, Math.min(zoomLimits.max, Math.round(value)));
+	}
+
+	useEventListener(
+		zoomFrame,
+		'wheel',
+		(event) => {
+			if (!event.ctrlKey || !zoomable.value || !event.deltaY) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 120 : 1);
+			setZoom(currentZoom() - Math.sign(pixels) * Math.min(20, Math.max(1, Math.abs(pixels) / 8)));
+		},
+		{ passive: false, capture: true },
+	);
+
+	let pinchBaseline = 100;
+	usePinchZoom(
+		zoomFrame,
+		() => {
+			pinchBaseline = currentZoom();
+		},
+		(ratio) => setZoom(pinchBaseline * ratio),
+	);
 
 	function shortcut(event: KeyboardEvent) {
 		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
@@ -250,7 +339,7 @@
 <template>
 	<section class="file-preview" :aria-label="tab.file.name" @keydown.capture="shortcut">
 		<template v-if="state === 'ready'">
-			<div v-if="tab.format.kind === 'image'" ref="imageFrame" class="file-preview__image">
+			<div v-if="tab.format.kind === 'image'" ref="zoomFrame" class="file-preview__image">
 				<img
 					:src="objectUrl"
 					:alt="tab.file.name"
@@ -263,13 +352,15 @@
 			<iframe
 				v-else-if="tab.format.kind === 'pdf'"
 				class="file-preview__pdf"
-				:src="objectUrl + '#view=Fit&toolbar=0'"
+				:src="objectUrl + '#view=Fit'"
 				:title="tab.file.name"
 				referrerpolicy="no-referrer"
 			/>
 			<div
 				v-else-if="tab.text && editor"
+				ref="zoomFrame"
 				class="file-preview__document"
+				:style="{ '--preview-scale': percent / 100 }"
 				:data-split="tab.mode === 'split' || undefined"
 			>
 				<CodeEditor
@@ -278,6 +369,7 @@
 					v-model="tab.text.draft"
 					:language="editor"
 					:label="copy.edit"
+					:font-size="editorFontSize"
 					:read-only="tab.mode === 'preview'"
 				/>
 				<div
@@ -356,9 +448,12 @@
 						:key="mode"
 						type="button"
 						:aria-pressed="tab.mode === mode"
+						:aria-label="copy[mode === 'preview' ? 'rendered' : mode]"
+						:title="copy[mode === 'preview' ? 'rendered' : mode]"
 						@click="tab.mode = mode"
 					>
-						{{ copy[mode === 'preview' ? 'rendered' : mode] }}
+						<span>{{ copy[mode === 'preview' ? 'rendered' : mode] }}</span>
+						<component :is="modeIcons[mode]" :size="15" aria-hidden="true" />
 					</button>
 				</div>
 				<template v-if="tab.format.kind === 'csv' && tab.mode === 'preview' && pages > 1 && state === 'ready'">
@@ -382,55 +477,18 @@
 						><ChevronRight :size="15"
 					/></UiButton>
 				</template>
-				<template v-if="imageSize && state === 'ready'">
+				<UiDropdownMenu v-if="zoomable" :items="zoomActions" @select="runFileAction">
 					<UiButton
+						class="file-preview__zoom file-preview__scale"
 						appearance="ghost"
 						density="compact"
-						icon-only
-						:aria-label="copy.zoomOut"
-						:title="copy.zoomOut"
-						@click="changeZoom(-25)"
-						><Minus :size="15"
-					/></UiButton>
-					<UiButton
-						appearance="ghost"
-						density="compact"
-						class="file-preview__scale"
-						:aria-label="copy.actualSize"
-						:title="copy.actualSize"
-						@click="zoom = 100"
-						>{{ zoom === 'fit' ? copy.fit : zoom + '%' }}</UiButton
+						:aria-label="copy.zoom + ' · ' + zoomLabel"
+						:title="copy.zoom"
 					>
-					<UiButton
-						appearance="ghost"
-						density="compact"
-						icon-only
-						:aria-label="copy.zoomIn"
-						:title="copy.zoomIn"
-						@click="changeZoom(25)"
-						><Plus :size="15"
-					/></UiButton>
-					<UiButton
-						appearance="ghost"
-						density="compact"
-						icon-only
-						:aria-label="copy.fit"
-						:title="copy.fit"
-						@click="zoom = 'fit'"
-						><Maximize :size="15"
-					/></UiButton>
-				</template>
-				<UiButton
-					v-if="editor && editorVisible && state === 'ready'"
-					appearance="ghost"
-					density="compact"
-					icon-only
-					:aria-label="copy.find"
-					:title="copy.find"
-					:disabled="!codeEditor"
-					@click="codeEditor?.openSearch()"
-					><Search :size="15"
-				/></UiButton>
+						<template #leading><ZoomIn :size="15" /></template>
+						{{ zoomLabel }}
+					</UiButton>
+				</UiDropdownMenu>
 				<UiButton
 					v-if="editor && tab.text && state === 'ready'"
 					appearance="ghost"
@@ -444,24 +502,29 @@
 					><Save :size="15"
 				/></UiButton>
 				<UiButton
+					v-for="action in fileActions"
+					:key="action.id"
+					class="file-preview__file-action"
 					appearance="ghost"
 					density="compact"
 					icon-only
-					:aria-label="copy.refresh"
-					:title="copy.refresh"
-					:disabled="state === 'loading' || tab.saving"
-					@click="reload"
-					><RotateCw :size="15"
+					:aria-label="action.label"
+					:title="action.label"
+					:disabled="action.disabled"
+					@click="runFileAction(action.id)"
+					><component :is="action.icon" :size="15"
 				/></UiButton>
-				<UiButton
-					appearance="ghost"
-					density="compact"
-					icon-only
-					:aria-label="copy.download"
-					:title="copy.download"
-					@click="download"
-					><ArrowDownToLine :size="15"
-				/></UiButton>
+				<UiDropdownMenu :items="mobileActions" @select="runFileAction">
+					<UiButton
+						class="file-preview__more"
+						appearance="ghost"
+						density="compact"
+						icon-only
+						:aria-label="copy.moreActions"
+						:title="copy.moreActions"
+						><Ellipsis :size="17"
+					/></UiButton>
+				</UiDropdownMenu>
 			</div>
 		</footer>
 
@@ -483,6 +546,10 @@
 		height: 100%;
 		min-height: 0;
 		color: var(--ui-text);
+	}
+	.file-preview__document,
+	.file-preview__document :deep(.monaco-scrollable-element) {
+		touch-action: pan-x pan-y;
 	}
 	.file-preview__document {
 		display: grid;
@@ -508,14 +575,15 @@
 	}
 	.file-preview__body,
 	.file-preview__image {
+		touch-action: pan-x pan-y;
 		min-height: 0;
 		min-width: 0;
 		overflow: auto;
 	}
-	.file-preview__body pre {
+	.file-preview__markdown :deep(pre) {
 		margin: 0;
 		padding: 16px;
-		font: 13px/1.65 var(--ui-font-mono, ui-monospace, monospace);
+		font: 0.93em/1.65 var(--ui-font-mono, ui-monospace, monospace);
 		tab-size: 4;
 	}
 	.file-preview__image {
@@ -545,7 +613,7 @@
 		margin-inline: auto;
 		padding: clamp(16px, 4vw, 36px);
 		overflow-wrap: anywhere;
-		font-size: 14px;
+		font-size: calc(14px * var(--preview-scale, 1));
 		line-height: 1.7;
 	}
 	.file-preview__markdown :deep(> :first-child) {
@@ -580,7 +648,7 @@
 	}
 	.file-preview__table {
 		min-width: 100%;
-		font-size: 13px;
+		font-size: calc(13px * var(--preview-scale, 1));
 	}
 	.file-preview__table td {
 		max-width: 44ch;
@@ -641,17 +709,9 @@
 		max-width: 130px;
 		margin-inline-end: 4px;
 	}
-	@container file-preview (max-width: 390px) {
-		.file-preview__footer {
-			flex-wrap: wrap;
-		}
-		.file-preview__info {
-			flex-basis: 100%;
-		}
-		.file-preview__tools {
-			flex: 1 1 auto;
-			flex-wrap: wrap;
-		}
+	.file-preview__more,
+	.file-preview__modes svg {
+		display: none;
 	}
 	.file-preview__modes {
 		margin-inline-end: 4px;
@@ -677,5 +737,44 @@
 		font-size: 12px;
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
+	}
+	@container file-preview (max-width: 480px) {
+		.file-preview__footer {
+			gap: 5px;
+			padding-inline: 7px;
+		}
+		.file-preview__tools {
+			--ui-button-height: 30px;
+			flex: 0 1 auto;
+			min-width: 0;
+		}
+		.file-preview__tools > button {
+			flex-shrink: 0;
+		}
+		.file-preview__tools > .file-preview__encoding {
+			flex: 0 1 auto;
+			min-width: 58px;
+			max-width: 96px;
+			margin-inline-end: 2px;
+		}
+		.file-preview__modes {
+			margin-inline-end: 2px;
+		}
+		.file-preview__modes button {
+			display: grid;
+			place-items: center;
+			width: 26px;
+			height: 26px;
+			padding: 0;
+		}
+		.file-preview__file-action,
+		.file-preview__zoom,
+		.file-preview__modes span {
+			display: none;
+		}
+		.file-preview__more,
+		.file-preview__modes svg {
+			display: inline-flex;
+		}
 	}
 </style>

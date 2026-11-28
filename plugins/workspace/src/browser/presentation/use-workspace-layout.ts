@@ -34,14 +34,6 @@ export function useWorkspaceLayout(props: {
 	const presentation: WorkspaceSessionPresentation = { ...props.session.presentation };
 	const viewport = { width: 0, height: 0 };
 
-	provide(panePresentationKey, {
-		scales,
-
-		changed: () => {
-			if (props.active) capture();
-		},
-	});
-
 	/** Dockview constrains grid groups. panel.api.setConstraints is inherited but does
 	 * not update Dockview's panel minima at runtime; restored group records must be
 	 * replaced through group.api. Reapply after moving a pane and changing headers.
@@ -73,6 +65,16 @@ export function useWorkspaceLayout(props: {
 
 	const profile = ref<LayoutProfile>('compact');
 	const config = computed<PresentationProfile>(() => presentationProfiles[profile.value]);
+	provide(panePresentationKey, {
+		scales,
+
+		defaultScale: (id) => config.value.defaultScales?.[id],
+
+		changed: () => {
+			if (props.active) capture();
+		},
+	});
+
 	const toolOpen = reactive<Partial<Record<WorkspaceTool, boolean>>>({});
 	const panelVisibility = reactive<Partial<Record<WorkspacePane, boolean>>>({});
 	const locked = ref(true),

@@ -8,6 +8,7 @@ export interface PresentationProfile {
 	initialRegions?: WorkspacePane[];
 	primary: WorkspacePane;
 	direction: 'right' | 'below';
+	defaultScales?: Partial<Record<WorkspacePane, number>>;
 	positions?: Partial<
 		Record<
 			WorkspacePane,
@@ -22,7 +23,7 @@ export interface PresentationProfile {
 	tools: Partial<
 		Record<WorkspaceTool, { presentation: 'sheet' | 'bottom'; defaultOpen: boolean; remember?: boolean }>
 	>;
-	navigation: { placement: 'side' | 'bottom'; display: 'icon' | 'icon-label'; items: string[] };
+	navigation: { placement: 'side' | 'bottom'; items: string[] };
 }
 
 export interface PresentationItem {

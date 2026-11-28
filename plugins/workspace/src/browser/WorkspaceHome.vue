@@ -1,6 +1,6 @@
 <script setup lang="ts">
-	import { computed, ref } from 'vue';
-	import { Server, Monitor, ScreenShare, Search, ChevronDown, Tags, Play, Plus, X, LoaderCircle } from '@lucide/vue';
+	import { computed, reactive, ref, watch } from 'vue';
+	import { Server, Monitor, ScreenShare, Search, ChevronRight, Plus, X, LoaderCircle } from '@lucide/vue';
 	import { CollapsibleRoot, CollapsibleTrigger, CollapsibleContent } from 'reka-ui';
 	import { UiBadge, UiButton, UiCard, UiInput, UiSelect } from 'nexus-terminal/browser/ui';
 	import { type Connection } from '@nexus-terminal/connections/connections-client-api';
@@ -29,6 +29,17 @@
 	const { t, n } = props.i18n;
 	const search = ref(''),
 		type = ref('all');
+	const collapsed = reactive(new Set<string>());
+	const searchCollapsed = reactive(new Set<string>());
+	const query = computed(() => search.value.trim().toLocaleLowerCase());
+	const collapsedGroups = computed(() => (query.value ? searchCollapsed : collapsed));
+	watch(query, () => searchCollapsed.clear());
+
+	function setGroupOpen(tag: string, open: boolean) {
+		if (open) collapsedGroups.value.delete(tag);
+		else collapsedGroups.value.add(tag);
+	}
+
 	const icons = { ssh: Server, rdp: Monitor, vnc: ScreenShare };
 	const typeOptions = computed(() => [
 		{ value: 'all', label: t('allTypes') },
@@ -38,14 +49,13 @@
 		})),
 	]);
 	const groups = computed(() => {
-		const query = search.value.trim().toLocaleLowerCase();
 		const groups = new Map<string, Connection[]>();
 		for (const connection of props.connections) {
 			if (type.value !== 'all' && connection.type !== type.value) continue;
 			if (
-				query &&
-				![connection.name, connection.host, ...connection.tags].some((value) =>
-					value.toLocaleLowerCase().includes(query),
+				query.value &&
+				![connection.name, address(connection), ...connection.tags].some((value) =>
+					value.toLocaleLowerCase().includes(query.value),
 				)
 			)
 				continue;
@@ -67,7 +77,7 @@
 	<div class="workspace-home">
 		<header class="workspace-home-heading">
 			<div class="workspace-home-heading__text">
-				<h2>{{ t(filesOnly ? 'fileManagerChoose' : 'subtitle') }}</h2>
+				<h2>{{ t(filesOnly ? 'serverDirectory' : 'connectionDirectory') }}</h2>
 			</div>
 			<div v-if="connections.length" class="workspace-home-actions">
 				<UiButton tone="primary" appearance="solid" :disabled="!connectionsAvailable" @click="emit('create')">
@@ -75,24 +85,27 @@
 				</UiButton>
 			</div>
 		</header>
-		<section v-if="suspended.length" class="workspace-suspended">
-			<h3>
-				<Play :size="16" />{{ t('sessions') }}<span>{{ suspended.length }}</span>
-			</h3>
-			<div class="workspace-home-grid">
+		<div v-if="connections.length" class="workspace-home-filters">
+			<div class="workspace-home-search">
+				<UiInput v-model="search" :placeholder="t('searchConnections')" :aria-label="t('searchConnections')"
+					><template #leading><Search :size="16" /></template
+				></UiInput>
+			</div>
+			<UiSelect v-if="!filesOnly" v-model="type" :options="typeOptions" :aria-label="t('filterType')" />
+		</div>
+		<section v-if="suspended.length" class="workspace-suspended" :aria-label="t('sessions')">
+			<div class="workspace-suspended-list">
 				<UiCard
 					v-for="session in suspended"
 					:key="session.id"
 					:title="session.name"
+					:description="t('suspendedSshSession')"
 					class="workspace-suspended-card"
 					tone="warning"
 					:action-label="t('resume') + ' · ' + session.name"
-					:icon="Play"
 					@select="emit('resume', session)"
 				>
-					<template #tags
-						><UiBadge tone="warning" dot>{{ t('suspended') }}</UiBadge></template
-					>
+					<template #icon><span class="workspace-suspended-dot" aria-hidden="true" /></template>
 					<template #actions
 						><UiButton
 							appearance="ghost"
@@ -109,14 +122,6 @@
 			class="workspace-home-groups"
 			:aria-busy="connectionsAvailable && !connectionsLoaded && !connectionsReadFailed"
 		>
-			<div v-if="connections.length" class="workspace-home-filters">
-				<div class="workspace-home-search">
-					<UiInput v-model="search" :placeholder="t('searchConnections')" :aria-label="t('searchConnections')"
-						><template #leading><Search :size="16" /></template
-					></UiInput>
-				</div>
-				<UiSelect v-if="!filesOnly" v-model="type" :options="typeOptions" :aria-label="t('filterType')" />
-			</div>
 			<div v-if="!connectionsLoaded" class="workspace-home-empty">
 				<p v-if="!connectionsAvailable" role="status">{{ t('connectionsUnavailable') }}</p>
 				<template v-else-if="connectionsReadFailed">
@@ -125,15 +130,20 @@
 				</template>
 				<p v-else role="status">{{ t('loadingConnections') }}</p>
 			</div>
-			<CollapsibleRoot v-for="group in groups" :key="group.tag" :default-open="true" class="workspace-group">
+			<CollapsibleRoot
+				v-for="group in groups"
+				:key="group.tag"
+				:open="!collapsedGroups.has(group.tag)"
+				class="workspace-group"
+				@update:open="setGroupOpen(group.tag, $event)"
+			>
 				<CollapsibleTrigger class="workspace-group-heading">
-					<Tags :size="16" aria-hidden="true" />
+					<ChevronRight :size="16" class="workspace-group-chevron" aria-hidden="true" />
 					<span class="workspace-group-label">{{ group.tag || t('ungrouped') }}</span>
 					<UiBadge class="workspace-group-count">{{ n(group.items.length) }}</UiBadge>
-					<ChevronDown :size="16" class="workspace-group-chevron" aria-hidden="true" />
 				</CollapsibleTrigger>
 				<CollapsibleContent
-					><div class="workspace-home-grid workspace-connections">
+					><div class="workspace-connections">
 						<UiCard
 							v-for="connection in group.items"
 							:key="connection.id"
@@ -141,7 +151,6 @@
 							:data-protocol="connection.type"
 							:title="connection.name"
 							:description="address(connection)"
-							:icon="icons[connection.type]"
 							:action-label="connection.name"
 							:disabled="connection.type === 'ssh' ? connecting : !desktopAvailable"
 							:aria-busy="connecting && selected === connection.id"

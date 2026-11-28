@@ -2,7 +2,7 @@
 	import '../../../../shared/browser/catalog.css';
 	import { ref, computed, onMounted } from 'vue';
 	import { KeyRound, LockKeyhole, Plus, Search, Trash2, RefreshCw } from '@lucide/vue';
-	import { UiInput, UiButton, UiCard, UiEmptyState, UiDialog, UiSelect } from 'nexus-terminal/browser/ui';
+	import { UiInput, UiButton, UiCard, UiEmptyState, UiDialog } from 'nexus-terminal/browser/ui';
 	import type { PluginWindowProps } from 'nexus-terminal/browser';
 	import { useI18n } from 'vue-i18n';
 	import { messages } from './messages.js';
@@ -24,9 +24,9 @@
 		pending = ref<Credential>(),
 		deleting = ref(false);
 	const typeOptions = computed(() => [
-		{ value: 'all', label: t('allTypes') },
-		{ value: 'password', label: t('passwordType') },
-		{ value: 'privateKey', label: t('privateKeyType') },
+		{ value: 'all', label: t('all') },
+		{ value: 'password', label: t('tile.password') },
+		{ value: 'privateKey', label: t('tile.privateKey') },
 	]);
 	const entries = computed(() =>
 		items.value.filter(
@@ -70,19 +70,6 @@
 					}}<template v-if="entries.length !== items.length"> / {{ n(items.length) }}</template>
 				</span>
 			</div>
-			<div v-if="!loaded || items.length" class="plugin-catalog__tools">
-				<div class="plugin-catalog__search">
-					<UiInput v-model="search" :placeholder="t('searchShort')" :aria-label="t('search')"
-						><template #leading><Search :size="16" /></template
-					></UiInput>
-				</div>
-				<UiSelect
-					v-model="type"
-					class="credentials-type-filter"
-					:options="typeOptions"
-					:aria-label="t('type')"
-				/>
-			</div>
 			<div v-if="!loaded || items.length" class="plugin-catalog__actions">
 				<UiButton tone="primary" appearance="solid" @click="editor = {}"
 					><template #leading><Plus :size="15" /></template>{{ t('add') }}</UiButton
@@ -96,6 +83,25 @@
 					@click="refresh"
 					><RefreshCw :size="16"
 				/></UiButton>
+			</div>
+			<div v-if="!loaded || items.length" class="plugin-catalog__tools">
+				<div class="credentials-options" role="group" :aria-label="t('type')">
+					<button
+						v-for="option in typeOptions"
+						:key="option.value"
+						class="credentials-option"
+						type="button"
+						:aria-pressed="type === option.value"
+						@click="type = option.value"
+					>
+						{{ option.label }}
+					</button>
+				</div>
+				<div class="plugin-catalog__search">
+					<UiInput v-model="search" :placeholder="t('searchShort')" :aria-label="t('search')"
+						><template #leading><Search :size="16" /></template
+					></UiInput>
+				</div>
 			</div>
 		</header>
 		<div
@@ -116,7 +122,7 @@
 				@select="editor = { credential: item }"
 			>
 				<template #title-end>
-					<span class="credentials-type" :data-type="item.type">{{ t(item.type + 'Type') }}</span>
+					<span class="credentials-type">{{ t(item.type + 'Type') }}</span>
 				</template>
 				<template #actions>
 					<UiButton

@@ -100,12 +100,16 @@
 
 <style scoped>
 	.workspace-file-viewport {
+		display: grid;
+		grid-template-rows: minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr);
 		flex: 1 1 0;
 		min-height: 0;
 		overflow: clip;
 	}
 	.workspace-file-list {
 		box-sizing: border-box;
+		touch-action: pan-x pan-y;
 		container: workspace-files / inline-size;
 		min-height: 0;
 		padding: 4px 6px 8px;
@@ -173,8 +177,7 @@
 	}
 	.workspace-file-viewport[data-files-only] {
 		--file-columns: 22px minmax(0, 1fr) 76px 144px;
-		display: flex;
-		flex-direction: column;
+		grid-template-rows: auto minmax(0, 1fr);
 		margin: 0 14px;
 		border: 1px solid var(--ui-border);
 		border-radius: 10px;
@@ -188,7 +191,7 @@
 		padding-inline: 12px;
 	}
 	.workspace-file-columns {
-		flex: none;
+		zoom: var(--workspace-file-scale, 1);
 		min-block-size: 32px;
 		border-bottom: 1px solid var(--ui-border);
 		background: color-mix(in srgb, var(--ui-text) 4%, var(--ui-surface));
@@ -202,7 +205,6 @@
 		grid-column: 2;
 	}
 	[data-files-only] .workspace-file-list {
-		flex: 1 1 auto;
 		min-height: 0;
 		gap: 0;
 		padding: 0;

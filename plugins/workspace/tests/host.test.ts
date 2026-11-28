@@ -225,6 +225,16 @@ it('installs and opens Workspace, confirms a host key and streams terminal and f
 	const groupHeading = workspace.locator('.workspace-group-heading');
 	await browserExpect(groupHeading.locator('[data-ui="badge"]')).toHaveText('2');
 	await browserExpect(groupHeading).toHaveAttribute('aria-expanded', 'true');
+	await groupHeading.click();
+	await browserExpect(groupHeading).toHaveAttribute('aria-expanded', 'false');
+	await browserExpect(workspace.getByRole('button', { name: 'Workspace test SSH', exact: true })).toHaveCount(0);
+	const search = workspace.getByRole('textbox', { name: 'Search name, address or tag' });
+	await search.fill('Workspace test SSH');
+	await browserExpect(groupHeading).toHaveAttribute('aria-expanded', 'true');
+	await browserExpect(workspace.getByRole('button', { name: 'Workspace test SSH', exact: true })).toBeVisible();
+	await search.clear();
+	await browserExpect(groupHeading).toHaveAttribute('aria-expanded', 'false');
+	await groupHeading.click();
 
 	const filters = workspace.locator('.workspace-home-filters');
 	const inputBounds = await filters.locator('[data-ui="input"]').boundingBox();

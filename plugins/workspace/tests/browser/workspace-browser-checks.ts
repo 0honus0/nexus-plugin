@@ -501,12 +501,13 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	await historyButton.click();
 	await expect(folder).toBeVisible();
 	const toolbar = files.locator('.workspace-file-tools');
-	await expect(toolbar.getByRole('button')).toHaveCount(8);
+	await expect(toolbar.getByRole('button')).toHaveCount(9);
 	for (const name of [
 		'Upload files',
 		'Refresh directory',
 		'Search this folder and subfolders',
 		'Sort files',
+		'List zoom (100%)',
 		'Show hidden files',
 		'Change terminal to this directory',
 		'Follow terminal directory',
@@ -514,6 +515,15 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	]) {
 		await expect(toolbar.getByRole('button', { name, exact: true })).toHaveAttribute('title', name);
 	}
+	const listZoom = toolbar.getByRole('button', { name: /^List zoom/ });
+	const rowHeight = (await entry.boundingBox())!.height;
+	await listZoom.click();
+	await page.getByRole('menuitem', { name: '150%', exact: true }).click();
+	await expect.poll(async () => (await entry.boundingBox())!.height).toBeGreaterThan(rowHeight);
+	await expect(listZoom).toHaveAccessibleName('List zoom (150%)');
+	await listZoom.click();
+	await page.getByRole('menuitem', { name: '100%', exact: true }).click();
+	await expect.poll(async () => (await entry.boundingBox())!.height).toBe(rowHeight);
 	const follow = toolbar.getByRole('button', { name: 'Follow terminal directory', exact: true });
 	const refresh = toolbar.getByRole('button', { name: 'Refresh directory', exact: true });
 	const releaseFollow = Promise.withResolvers<void>();
@@ -613,6 +623,11 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 			await sheet.getByRole('option', { name: '/', exact: true }).click();
 			await expect(sheet.getByRole('combobox', { name: 'Remote path' })).toHaveValue('/');
 			await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+			await workspace.getByRole('button', { name: 'Server status', exact: true }).click();
+			const status = page.getByRole('dialog', { name: 'Server status', exact: true });
+			await expect(status.locator('.workspace-status-panel')).toHaveAttribute('data-status-scale', '1.20');
+			await expect(status.locator('.metric-row')).toHaveCount(5);
+			await status.getByRole('button', { name: 'Close', exact: true }).click();
 		}
 		expect(
 			SessionListResponseSchema.parse(await host.json(base + '/sessions')).items.map((session) => session.id),
@@ -727,7 +742,8 @@ export async function verifyWorkspaceSessionPresentation(
 	expect(released.status(), await released.text()).toBe(204);
 	await expect(first).toHaveCount(0);
 	await workspace.getByRole('button', { name: 'New session', exact: true }).click();
-	const resume = workspace.getByRole('button', { name: 'Resume · Workspace test SSH', exact: true });
+	const suspendedSessions = workspace.getByRole('region', { name: 'Suspended sessions', exact: true });
+	const resume = suspendedSessions.getByRole('button', { name: 'Resume · Workspace test SSH', exact: true });
 	const suspended = SessionListResponseSchema.parse(await host.json(base + '/sessions')).items.find(
 		(item) => item.id === session.id,
 	);
@@ -736,6 +752,7 @@ export async function verifyWorkspaceSessionPresentation(
 		presentation: { [profile!]: { scales: { files: 1.1, terminal: fontSize + 1 } } },
 	});
 	await expect(resume).toBeVisible();
+	await expect(resume).toHaveText('Workspace test SSHSuspended SSH session');
 	await resume.click();
 	await expect.poll(width, { message: JSON.stringify(suspended?.presentation) }).toBeCloseTo(suspendedWidth, 0);
 	await expect(files).toHaveCSS('transform', 'matrix(1.1, 0, 0, 1.1, 0, 0)');

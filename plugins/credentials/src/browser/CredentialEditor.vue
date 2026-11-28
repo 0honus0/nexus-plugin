@@ -2,8 +2,8 @@
 	import { ref, computed, useId } from 'vue';
 	import type { PluginWindowApi } from 'nexus-terminal/browser';
 	import { useI18n } from 'vue-i18n';
-	import { Save, Upload, KeyRound } from '@lucide/vue';
-	import { UiDialog, UiButton, UiInput, UiSelect, UiField } from 'nexus-terminal/browser/ui';
+	import { Save, Upload, KeyRound, LockKeyhole } from '@lucide/vue';
+	import { UiDialog, UiButton, UiInput, UiField } from 'nexus-terminal/browser/ui';
 	import {
 		privateKeyLimit,
 		CredentialInputSchema,
@@ -28,8 +28,8 @@
 	});
 	const changedType = computed(() => !props.credential || props.credential.type !== draft.value.type);
 	const types = computed(() => [
-		{ value: 'password', label: t('passwordType') },
-		{ value: 'privateKey', label: t('privateKeyType') },
+		{ value: 'password', label: t('passwordType'), icon: LockKeyhole },
+		{ value: 'privateKey', label: t('privateKeyType'), icon: KeyRound },
 	]);
 
 	async function upload(event: Event) {
@@ -100,9 +100,15 @@
 					:disabled="saving"
 				/>
 			</UiField>
-			<UiField :label="t('type')" v-slot="f"
-				><UiSelect v-model="draft.type" :id="f.id" :options="types" block :disabled="saving"
-			/></UiField>
+			<fieldset class="credentials-method" :disabled="saving">
+				<legend>{{ t('type') }}</legend>
+				<div class="credentials-options credentials-options--editor">
+					<label v-for="option in types" :key="option.value" class="credentials-option">
+						<input v-model="draft.type" type="radio" :name="form + '-type'" :value="option.value" />
+						<component :is="option.icon" :size="15" aria-hidden="true" />{{ option.label }}
+					</label>
+				</div>
+			</fieldset>
 			<UiField
 				v-if="draft.type === 'password'"
 				:label="t('password')"

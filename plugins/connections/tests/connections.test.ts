@@ -175,6 +175,10 @@ test(
 
 		await app.getByRole('button', { name: 'Add connection', exact: true }).click();
 		const dialog = page.getByRole('dialog', { name: 'Add connection' });
+		await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).not.toHaveCSS(
+			'border-top-color',
+			'rgba(0, 0, 0, 0)',
+		);
 		await dialog
 			.locator('label[for]')
 			.filter({ hasText: /^Tags$/u })

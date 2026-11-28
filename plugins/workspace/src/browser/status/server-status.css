@@ -10,7 +10,8 @@
 	--status-text: var(--ui-text);
 	--status-muted: var(--ui-muted);
 	--status-border: var(--ui-border);
-	--status-card: color-mix(in srgb, var(--ui-surface) 92%, var(--ui-background));
+	--status-card: var(--ui-surface);
+	--status-fill-strength: 55%;
 	--status-download: var(--ui-success);
 	--status-upload: var(--ui-primary);
 	--status-danger: var(--ui-danger);
@@ -21,6 +22,10 @@
 	min-width: 0;
 	color: var(--status-text);
 	background: transparent;
+}
+:global(:root[data-ui-mode='dark']:not([data-ui-theme-mode='light'])) .status-surface,
+:global(:root[data-ui-theme-mode='dark']) .status-surface {
+	--status-fill-strength: 46%;
 }
 .status-loading {
 	display: flex;
@@ -294,6 +299,7 @@ button.live-state:focus-visible {
 	min-height: 0;
 }
 .metric-row {
+	--metric-tone: var(--metric-accent);
 	position: relative;
 	box-sizing: border-box;
 	display: grid;
@@ -305,9 +311,9 @@ button.live-state:focus-visible {
 	min-height: 0;
 	padding: min(0.38rem, 0.9cqh) min(0.55rem, 3.2cqw) min(0.4rem, 0.95cqh) min(0.6rem, 3.6cqw);
 	overflow: hidden;
-	border: calc(1px / var(--status-scale, 1)) solid var(--status-border);
+	border: calc(1px / var(--status-scale, 1)) solid color-mix(in srgb, var(--metric-tone) 20%, var(--status-border));
 	border-radius: calc(8px / var(--status-scale, 1));
-	background: var(--status-card);
+	background: color-mix(in srgb, var(--metric-tone) 7%, var(--status-card));
 	box-shadow: none;
 	color: inherit;
 	font: inherit;
@@ -318,12 +324,15 @@ button.live-state:focus-visible {
 		border-color 120ms ease;
 }
 .metric-row:hover {
-	border-color: color-mix(in srgb, var(--metric-accent) 34%, var(--status-border));
-	background: color-mix(in srgb, var(--metric-accent) 6%, var(--status-card));
+	border-color: color-mix(in srgb, var(--metric-tone) 45%, var(--status-border));
+	background: color-mix(in srgb, var(--metric-tone) 12%, var(--status-card));
 }
 .metric-row.selected {
-	border-color: color-mix(in srgb, var(--metric-accent) 52%, var(--status-border));
-	background: color-mix(in srgb, var(--metric-accent) 10%, var(--status-card));
+	border-color: color-mix(in srgb, var(--metric-tone) 62%, var(--status-border));
+	background: color-mix(in srgb, var(--metric-tone) 17%, var(--status-card));
+}
+.metric-row.critical {
+	--metric-tone: var(--status-danger);
 }
 .metric-row:focus-visible,
 .history-close:focus-visible,
@@ -339,8 +348,8 @@ button.live-state:focus-visible {
 	max-height: 100%;
 	min-height: 0;
 	border-radius: calc(6px / var(--status-scale, 1));
-	background: color-mix(in srgb, currentColor 10%, transparent);
-	color: var(--metric-accent);
+	background: color-mix(in srgb, currentColor 17%, transparent);
+	color: var(--metric-tone);
 }
 .metric-icon svg,
 .metric-icon i {
@@ -409,7 +418,7 @@ button.live-state:focus-visible {
 .metric-reading {
 	display: none;
 	flex: none;
-	color: var(--metric-accent);
+	color: var(--metric-tone);
 	font-variant-numeric: tabular-nums;
 	font-size: 0.82em;
 	font-weight: 680;
@@ -424,14 +433,14 @@ button.live-state:focus-visible {
 	min-height: calc(14px / var(--status-scale, 1));
 	overflow: hidden;
 	border-radius: 999px;
-	background: color-mix(in srgb, var(--status-text) 8%, transparent);
+	background: color-mix(in srgb, var(--metric-tone) 12%, var(--status-card));
 }
 .metric-track i {
 	position: absolute;
 	inset: 0 auto 0 0;
 	height: 100%;
 	border-radius: inherit;
-	background: color-mix(in srgb, var(--metric-accent) 42%, var(--ui-surface));
+	background: color-mix(in srgb, var(--metric-tone) var(--status-fill-strength), var(--status-card));
 	transition: width 300ms ease;
 }
 .metric-track-label {
@@ -455,13 +464,6 @@ button.live-state:focus-visible {
 	padding-left: calc(7px / var(--status-scale, 1));
 	color: color-mix(in srgb, var(--status-text) 68%, transparent);
 	transform: translate(0, -50%);
-}
-.metric-row.critical .metric-track i {
-	background: color-mix(in srgb, var(--status-danger) 42%, var(--ui-surface));
-}
-.metric-row.critical .metric-icon,
-.metric-row.critical .metric-reading {
-	color: var(--status-danger);
 }
 .monitor-content:not(.has-history) .network-row .metric-body {
 	display: grid;
@@ -683,7 +685,7 @@ button.live-state:focus-visible {
 	min-width: 0;
 	padding: calc(2px / var(--status-scale, 1));
 	border-radius: calc(6px / var(--status-scale, 1));
-	background: color-mix(in srgb, var(--status-text) 5%, transparent);
+	background: color-mix(in srgb, var(--history-accent) 9%, var(--status-card));
 	font-size: calc(9px / var(--status-scale, 1));
 	line-height: 1;
 }
@@ -711,8 +713,8 @@ button.live-state:focus-visible {
 	color: var(--status-text);
 }
 .range-tabs button.active {
-	background: var(--ui-surface);
-	box-shadow: inset 0 0 0 1px var(--status-border);
+	background: color-mix(in srgb, var(--history-accent) 15%, var(--status-card));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--history-accent) 28%, var(--status-border));
 	color: var(--history-accent);
 	font-weight: 600;
 }
@@ -959,6 +961,31 @@ button.live-state:focus-visible {
 	.status-loading-traffic {
 		grid-column: 3;
 		grid-row: 1;
+	}
+}
+
+@media (max-width: 699px) and (pointer: coarse) {
+	@container status-content (min-height: 320px) {
+		:global(.workspace-tool-sheet .status-surface .monitor-header) {
+			padding-inline: calc(16px / var(--status-scale, 1));
+		}
+		:global(.workspace-tool-sheet .status-surface :is(.monitor-content, .status-loading-list)) {
+			gap: calc(14px / var(--status-scale, 1));
+			padding: calc(14px / var(--status-scale, 1)) calc(16px / var(--status-scale, 1))
+				calc(16px / var(--status-scale, 1));
+		}
+		:global(.workspace-tool-sheet .status-surface .monitor-content:not(.has-history) .metric-list) {
+			gap: calc(clamp(10px, 3cqh, 15px) / var(--status-scale, 1));
+		}
+		:global(
+			.workspace-tool-sheet
+				.status-surface
+				:is(.monitor-content:not(.has-history) .metric-row, .status-loading-card)
+		) {
+			column-gap: calc(12px / var(--status-scale, 1));
+			padding-inline: calc(13px / var(--status-scale, 1));
+			border-radius: calc(12px / var(--status-scale, 1));
+		}
 	}
 }
 

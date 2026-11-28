@@ -18,29 +18,25 @@
 			>
 				<UiButton
 					appearance="ghost"
-					:icon-only="config.display === 'icon'"
+					icon-only
 					:aria-label="item.label"
 					:title="item.label"
 					:disabled="item.disabled"
-					><component :is="item.icon" :size="18" /><span v-if="config.display === 'icon-label'">{{
-						item.label
-					}}</span></UiButton
-				>
+					><component :is="item.icon" :size="18" aria-hidden="true"
+				/></UiButton>
 			</UiDropdownMenu>
 			<UiButton
 				v-else
 				appearance="ghost"
-				:icon-only="config.display === 'icon'"
+				icon-only
 				:aria-label="item.label"
 				:title="item.label"
 				:aria-pressed="item.active"
 				:disabled="item.disabled"
 				:loading="item.loading"
 				@click="item.run"
-				><component :is="item.icon" :size="18" /><span v-if="config.display === 'icon-label'">{{
-					item.label
-				}}</span></UiButton
-			>
+				><component :is="item.icon" :size="18" aria-hidden="true"
+			/></UiButton>
 		</template>
 	</nav>
 </template>

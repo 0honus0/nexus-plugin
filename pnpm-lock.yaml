@@ -1600,7 +1600,7 @@ packages:
     engines: {node: '>=18'}
 
   nexus-terminal@file:vendor/nexus-terminal-1.2.0.tgz:
-    resolution: {integrity: sha512-+QM26AzYnT91nrYpjqctfFoODL6w7xqixZgFmFJz5jHFCORkVJAsMmehhDBEpU3viqnqt1a2dxmRvHDFo2JdtA==, tarball: file:vendor/nexus-terminal-1.2.0.tgz}
+    resolution: {integrity: sha512-H/HEvbHrUDhrSwCMQJEbHq9anhuHfX3lIc61oOvLZiRKEbnPp51ssD6AAXXw7cE/35foFQo+5LYMSSPXmz8Q3w==, tarball: file:vendor/nexus-terminal-1.2.0.tgz}
     version: 1.2.0
     engines: {node: '>=26.13.1'}
     peerDependencies:

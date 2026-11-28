@@ -31,7 +31,6 @@ export const messages = {
 		noResults: '没有匹配的认证',
 		clearFilters: '重置筛选',
 		key: '私钥',
-		allTypes: '全部类型',
 		all: '全部',
 		notices: {
 			CREDENTIALS_KEY_TYPE_UNSUPPORTED: '暂不支持此密钥类型。',
@@ -78,7 +77,6 @@ export const messages = {
 		noResults: 'No matching credentials',
 		clearFilters: 'Reset filters',
 		key: 'Private key',
-		allTypes: 'All types',
 		all: 'All',
 		notices: {
 			CREDENTIALS_KEY_TYPE_UNSUPPORTED: 'This key type is not supported.',

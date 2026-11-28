@@ -139,12 +139,13 @@
 		() => syncNetworkAxis(true),
 	);
 
+	const chart = ref<HTMLElement>();
 	const chartTheme = ref({
 		text: '#666666',
 		grid: '#cccccc',
 		surface: '#ffffff',
 		border: '#cccccc',
-		primary: '#a06cd5',
+		series: '#a06cd5',
 		download: '#326b58',
 		upload: '#7752b4',
 	});
@@ -159,7 +160,7 @@
 			grid: value('--ui-border', chartTheme.value.grid),
 			surface: value('--ui-background', chartTheme.value.surface),
 			border: value('--ui-border', chartTheme.value.border),
-			primary: value('--ui-primary', chartTheme.value.primary),
+			series: chart.value ? getComputedStyle(chart.value).color : chartTheme.value.series,
 			download: value('--ui-success', chartTheme.value.download),
 			upload: value('--ui-primary', chartTheme.value.upload),
 		};
@@ -170,6 +171,7 @@
 	};
 
 	onMounted(readTheme);
+	watch(() => props.metric, readTheme, { flush: 'post' });
 	useMutationObserver(document.documentElement, readTheme, { attributes: true });
 	useEventListener(window, 'resize', handleViewportChange);
 	useEventListener(window, 'scroll', handleViewportChange, { capture: true });
@@ -280,8 +282,8 @@
 				{
 					label: singleLabel.value,
 					...toChartSeries(props.history[props.metric]),
-					borderColor: chartTheme.value.primary,
-					backgroundColor: chartTheme.value.primary,
+					borderColor: chartTheme.value.series,
+					backgroundColor: chartTheme.value.series,
 					borderWidth: 2,
 					pointHoverRadius: 3,
 					cubicInterpolationMode: 'monotone',
@@ -398,6 +400,7 @@
 
 <template>
 	<div
+		ref="chart"
 		class="status-history-chart"
 		:data-range-minutes="props.rangeMinutes"
 		:data-window-start="windowStart"
@@ -421,6 +424,9 @@
 </template>
 
 <style scoped>
+	.status-history-chart {
+		color: var(--history-accent, var(--ui-primary));
+	}
 	.status-history-tooltip {
 		position: fixed;
 		z-index: 1001;

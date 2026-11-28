@@ -15,13 +15,21 @@
 	import 'monaco-editor/languages/definitions/markdown/register';
 	import 'monaco-editor/languages/definitions/python/register';
 	import 'monaco-editor/languages/definitions/typescript/register';
+	// The JSON worker factory loads editor contributions that must register before the first editor.
+	import 'monaco-editor/internal/common/workers';
 	import 'monaco-editor/language/json/monaco.contribution';
 	import { editor, type Environment } from 'monaco-editor/editor/editor.api';
 	import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 	import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
 	import { onMounted, onScopeDispose, useTemplateRef, watch } from 'vue';
 
-	const props = defineProps<{ modelValue: string; language: string; label: string; readOnly?: boolean }>();
+	const props = defineProps<{
+		modelValue: string;
+		language: string;
+		label: string;
+		fontSize: number;
+		readOnly?: boolean;
+	}>();
 	const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 	const host = useTemplateRef('host');
 	let instance: editor.IStandaloneCodeEditor | undefined;
@@ -41,7 +49,7 @@
 			ariaLabel: props.label,
 			automaticLayout: true,
 			theme: 'vs-dark',
-			fontSize: 14,
+			fontSize: props.fontSize,
 			readOnly: props.readOnly,
 			wordWrap: 'on',
 			wrappingIndent: 'same',
@@ -64,8 +72,8 @@
 		},
 	);
 	watch(
-		() => [props.readOnly, props.label] as const,
-		([readOnly, ariaLabel]) => instance?.updateOptions({ readOnly, ariaLabel }),
+		() => [props.readOnly, props.label, props.fontSize] as const,
+		([readOnly, ariaLabel, fontSize]) => instance?.updateOptions({ readOnly, ariaLabel, fontSize }),
 	);
 
 	function openSearch(): void {

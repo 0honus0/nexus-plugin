@@ -16,6 +16,7 @@ export interface PanePresentation {
 
 export const panePresentationKey: InjectionKey<{
 	scales: Partial<Record<WorkspacePane, number>>;
+	defaultScale(id: WorkspacePane): number | undefined;
 	changed(): void;
 }> = Symbol('pane-presentation');
 
@@ -29,7 +30,10 @@ export function usePanePresentation(target: Ref<HTMLElement | undefined>, defini
 		get: () =>
 			Math.max(
 				definition.scale.min,
-				Math.min(definition.scale.max, host?.scales[definition.id] ?? fallback.value),
+				Math.min(
+					definition.scale.max,
+					host?.scales[definition.id] ?? host?.defaultScale(definition.id) ?? fallback.value,
+				),
 			),
 
 		set(value: number) {
@@ -41,7 +45,7 @@ export function usePanePresentation(target: Ref<HTMLElement | undefined>, defini
 			} else fallback.value = next;
 		},
 	});
-	useInputScale({ target, value: scale, ...definition.scale, precision: 2 });
+	const inputScale = useInputScale({ target, value: scale, ...definition.scale, precision: 2 });
 	const style = computed(() => ({
 		width: `${100 / scale.value}%`,
 		height: `${100 / scale.value}%`,
@@ -49,5 +53,5 @@ export function usePanePresentation(target: Ref<HTMLElement | undefined>, defini
 		transform: `scale(${scale.value})`,
 		transformOrigin: 'top left',
 	}));
-	return { scale, style };
+	return { scale, style, inputScale };
 }

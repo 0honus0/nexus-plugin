@@ -101,7 +101,7 @@ test(
 			['SSH key fixture', 'Private key'],
 		]) {
 			const card = app.locator('.credentials-card').filter({ hasText: name });
-			const label = card.getByText(type, { exact: true });
+			const label = card.locator('.ui-card__title-line').getByText(type, { exact: true });
 			const edit = card.getByRole('button', { name: 'Edit credential · ' + name, exact: true });
 			await expect(label).toHaveCount(1);
 			await expect(card.getByRole('button', { name: 'Delete · ' + name, exact: true })).toBeVisible();
@@ -111,6 +111,14 @@ test(
 			await expect(editor.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue(name);
 			await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
 		}
+
+		const badgeColor = (kind: string) =>
+			app
+				.locator(`.credentials-card[data-type="${kind}"] .credentials-type`)
+				.first()
+				.evaluate((badge) => getComputedStyle(badge).color);
+
+		expect(await badgeColor('password')).not.toBe(await badgeColor('privateKey'));
 
 		await app.getByRole('button', { name: 'Add credential', exact: true }).click();
 		const dialog = page.getByRole('dialog', { name: 'Add credential' });
@@ -137,21 +145,19 @@ test(
 		const search = app.getByRole('textbox', { name: 'Search name or username', exact: true });
 		await search.fill('browser-user');
 		await expect(app.locator('.credentials-card')).toHaveCount(1);
-		const filters = app.getByRole('combobox', { name: 'Authentication', exact: true });
-		await filters.click();
-		await page.getByRole('option', { name: 'Private key', exact: true }).click();
-		await expect(filters).toContainText('Private key');
+		const filters = app.getByRole('group', { name: 'Authentication', exact: true });
+		const keyFilter = filters.getByRole('button', { name: 'Key', exact: true });
+		await keyFilter.click();
+		await expect(keyFilter).toHaveAttribute('aria-pressed', 'true');
 		await expect(app.getByText('No matching credentials', { exact: true })).toBeVisible();
-		await filters.click();
-		await page.getByRole('option', { name: 'All types', exact: true }).click();
+		await filters.getByRole('button', { name: 'All', exact: true }).click();
 		await search.clear();
 		await expect(app.getByText('Edited browser credential', { exact: true })).toBeVisible();
 
 		await app.getByRole('button', { name: 'Add credential', exact: true }).click();
 		await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Invalid browser key');
 		await dialog.getByRole('textbox', { name: 'Username', exact: true }).fill('browser-user');
-		await dialog.getByRole('combobox', { name: 'Authentication' }).click();
-		await page.getByRole('option', { name: 'Private key', exact: true }).click();
+		await dialog.getByRole('radio', { name: 'Private key', exact: true }).check();
 		const upload = dialog.getByRole('button', { name: 'Choose private key file' });
 		const keyInput = dialog.getByRole('textbox', { name: 'Private key', exact: true });
 		await expectFormFields(dialog);
@@ -164,8 +170,7 @@ test(
 		await app.getByRole('button', { name: 'Add credential', exact: true }).click();
 		await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Imported key fixture');
 		await dialog.getByRole('textbox', { name: 'Username', exact: true }).fill('browser-user');
-		await dialog.getByRole('combobox', { name: 'Authentication' }).click();
-		await page.getByRole('option', { name: 'Private key', exact: true }).click();
+		await dialog.getByRole('radio', { name: 'Private key', exact: true }).check();
 		await dialog.locator('input[type=file]').setInputFiles({
 			name: 'fixture.pem',
 			mimeType: 'application/x-pem-file',

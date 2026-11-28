@@ -1,6 +1,7 @@
 <script setup lang="ts">
-	import { computed, onScopeDispose, ref, watch } from 'vue';
+	import { computed, onScopeDispose, ref, watch, type Component } from 'vue';
 	import { useDocumentVisibility, useEventListener } from '@vueuse/core';
+	import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Delete } from '@lucide/vue';
 	import type { TerminalInput } from './terminal-input';
 	import type { TerminalKey } from './terminal-keys';
 	import type { TerminalModifier } from './terminal-sticky-modifiers';
@@ -13,11 +14,11 @@
 	}>();
 	const functionPage = ref(false);
 	type KeyDefinition =
-		| { kind: 'key'; id: TerminalKey; label: string }
+		| { kind: 'key'; id: TerminalKey; label: string | Component }
 		| { kind: 'modifier'; id: TerminalModifier; label: string }
 		| { kind: 'page' | 'spacer'; id: string; label: string };
 
-	const key = (id: TerminalKey, label: string): KeyDefinition => ({ kind: 'key', id, label });
+	const key = (id: TerminalKey, label: string | Component): KeyDefinition => ({ kind: 'key', id, label });
 
 	// Keep the first three columns fixed on both pages, as in the original keyboard.
 	const prefixes: KeyDefinition[][] = [
@@ -38,16 +39,16 @@
 			key('pageUp', 'PgUp'),
 			key('delete', 'Del'),
 			{ kind: 'spacer', id: 'arrow-gap', label: '' },
-			key('arrowUp', '↑'),
-			key('backspace', '⌫'),
+			key('arrowUp', ArrowUp),
+			key('backspace', Delete),
 		],
 		[
 			key('end', 'End'),
 			key('pageDown', 'PgDn'),
 			key('insert', 'Ins'),
-			key('arrowLeft', '←'),
-			key('arrowDown', '↓'),
-			key('arrowRight', '→'),
+			key('arrowLeft', ArrowLeft),
+			key('arrowDown', ArrowDown),
+			key('arrowRight', ArrowRight),
 		],
 	];
 	const rows = computed(() =>
@@ -69,7 +70,9 @@
 				state: props.i18n.t('modifierState.' + props.input.modifiers.levels[definition.id]),
 			});
 		if (definition.kind === 'page') return props.i18n.t('functionKeys');
-		return /^f\d+$/.test(definition.id) ? definition.label : props.i18n.t('keys.' + definition.id);
+		return /^f\d+$/.test(definition.id) && typeof definition.label === 'string'
+			? definition.label
+			: props.i18n.t('keys.' + definition.id);
 	}
 
 	function click(event: MouseEvent, definition: KeyDefinition) {
@@ -144,7 +147,8 @@
 					@lostpointercapture="stop"
 					@click="click($event, definition)"
 				>
-					{{ definition.label }}
+					<span v-if="typeof definition.label === 'string'">{{ definition.label }}</span>
+					<component v-else :is="definition.label" :size="16" :stroke-width="1.8" aria-hidden="true" />
 				</button>
 			</template>
 		</div>

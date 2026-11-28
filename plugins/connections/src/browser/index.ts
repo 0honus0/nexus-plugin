@@ -60,13 +60,7 @@ export const activate: PluginModuleApi['activate'] = async (context) => {
 		tile: { component: tile, showAtIconSize: true },
 		scrollbarGutter: 'stable',
 	} as const;
-	try {
-		context.contribute({ applications: [{ ...application, preload }] });
-	} catch (cause) {
-		if (!(cause instanceof Error) || !('code' in cause) || cause.code !== 'PLUGIN_CONTRIBUTIONS_INVALID')
-			throw cause;
-		context.contribute({ applications: [application] });
-	}
+	context.contribute({ applications: [{ ...application, preload }] });
 	await client.refresh().catch((cause) => client.report(cause, undefined, false));
 	context.signal.throwIfAborted();
 	context.self.readiness.set({ state: 'ready' });

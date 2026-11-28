@@ -253,6 +253,7 @@
 		color: var(--_ink);
 	}
 	.connections-tile[data-shape='compact'] .connections-tile__total {
+		align-self: center;
 		flex-wrap: wrap;
 		gap: 1px 5px;
 	}
@@ -296,10 +297,8 @@
 		gap: 4px;
 	}
 	.connections-tile[data-shape='wide'] .connections-tile__group {
-		flex-direction: row;
 		align-items: center;
-		justify-content: center;
-		gap: 4px;
+		gap: 2px;
 	}
 	.connections-tile[data-shape='wide'] .connections-tile__group-label {
 		gap: 3px;
@@ -337,12 +336,6 @@
 		font-size: 12.5px;
 	}
 
-	@container (max-width: 230px) {
-		.connections-tile[data-shape='wide'] .connections-tile__group {
-			flex-direction: column;
-			gap: 2px;
-		}
-	}
 	@container (max-width: 138px) {
 		.connections-tile[data-shape='wide'] :deep(.ui-action-card__content) {
 			grid-template-columns: minmax(0, 1fr);

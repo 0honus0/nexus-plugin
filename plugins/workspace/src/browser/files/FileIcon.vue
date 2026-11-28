@@ -3,6 +3,7 @@
 	import {
 		File,
 		Folder,
+		FolderOpen,
 		Link,
 		FileImage,
 		FileVideo,
@@ -31,6 +32,7 @@
 	const icons = {
 		file: File,
 		folder: Folder,
+		parent: FolderOpen,
 		link: Link,
 		image: FileImage,
 		video: FileVideo,
@@ -75,10 +77,10 @@
 		display: block;
 		flex: none;
 	}
-	.workspace-file-icon[data-file-icon='folder'] {
+	.workspace-file-icon:is([data-file-icon='folder'], [data-file-icon='parent']) {
 		color: color-mix(in srgb, var(--ui-primary) 78%, var(--ui-text));
 	}
-	.workspace-file-icon[data-file-icon='folder'] > svg {
+	.workspace-file-icon:is([data-file-icon='folder'], [data-file-icon='parent']) > svg {
 		fill: color-mix(in srgb, var(--ui-primary) 16%, transparent);
 	}
 	.workspace-file-icon[data-file-icon='code'],

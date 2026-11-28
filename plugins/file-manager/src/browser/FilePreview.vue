@@ -1,16 +1,33 @@
 <script setup lang="ts">
-	import { computed, onScopeDispose, ref, watch } from 'vue';
+	import { computed, defineAsyncComponent, onScopeDispose, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { ArrowDownToLine, ChevronLeft, ChevronRight, Maximize, Minus, Plus, RotateCw, Save } from '@lucide/vue';
-	import { UiButton, UiDialog } from 'nexus-terminal/browser/ui';
+	import {
+		ArrowDownToLine,
+		ChevronLeft,
+		ChevronRight,
+		Maximize,
+		Minus,
+		Plus,
+		RotateCw,
+		Save,
+		Search,
+	} from '@lucide/vue';
+	import { UiButton, UiDialog, UiSelect } from 'nexus-terminal/browser/ui';
 	import { sha256 } from '@noble/hashes/sha2.js';
 	import { bytesToHex } from '@noble/hashes/utils.js';
 	import Papa from 'papaparse';
-	import CodeEditor from './CodeEditor.vue';
 	import { isDirty, type PreviewDocument } from './preview-document.js';
 	import { renderMarkdown } from './preview-markdown.js';
 	import { language, messages } from './messages.js';
+	import {
+		decodeText,
+		encodeText,
+		textEncodings,
+		UnrepresentableTextError,
+		type EncodingChoice,
+	} from './text-encoding.js';
 
+	const CodeEditor = defineAsyncComponent(() => import('./CodeEditor.vue'));
 	const props = defineProps<{ tab: PreviewDocument; signal: AbortSignal }>();
 	const { locale } = useI18n({ useScope: 'global' });
 	const copy = computed(() => messages[language(locale.value)]);
@@ -22,9 +39,16 @@
 	const zoom = ref<number | 'fit'>('fit');
 	const imageFrame = ref<HTMLElement>();
 	const saveStatus = ref<
-		'saved' | 'saveFailed' | 'downloadFailed' | 'conflict' | 'tooLarge' | 'atomicSaveUnavailable'
+		| 'saved'
+		| 'saveFailed'
+		| 'downloadFailed'
+		| 'conflict'
+		| 'tooLarge'
+		| 'atomicSaveUnavailable'
+		| 'unrepresentable'
 	>();
 	const reloadPrompt = ref(false);
+	const pendingEncoding = ref<EncodingChoice>();
 	const page = ref(0);
 	const pageSize = 100;
 	const columnPage = ref(0);
@@ -34,6 +58,13 @@
 	const active = AbortSignal.any([props.signal, lifetime.signal]);
 
 	const editor = computed(() => ('language' in props.tab.format ? props.tab.format.language : undefined));
+	const codeEditor = ref<{ openSearch(): void }>();
+	const editorVisible = computed(() => props.tab.mode !== 'preview' || props.tab.format.kind === 'text');
+	const encodingOptions = computed(() => [
+		{ value: 'auto', label: copy.value.autoEncoding },
+		...Object.entries(textEncodings).map(([value, label]) => ({ value, label })),
+	]);
+	const lineEndings = { '\r\n': 'CRLF', '\n': 'LF', '\r': 'CR' };
 	const dirty = computed(() => isDirty(props.tab));
 	const source = computed(() => props.tab.text?.draft ?? '');
 	const markdown = computed(() => renderMarkdown(source.value));
@@ -77,6 +108,7 @@
 		state.value = 'loading';
 		saveStatus.value = undefined;
 		reloadPrompt.value = false;
+		pendingEncoding.value = undefined;
 		page.value = 0;
 		columnPage.value = 0;
 		releaseObject();
@@ -88,22 +120,26 @@
 			if ('mime' in format) {
 				objectUrl.value = URL.createObjectURL(new Blob([bytes], { type: format.mime }));
 			} else {
-				let decoded: string;
+				let decoded;
 				try {
-					decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-					if (decoded.includes('\0')) throw new TypeError();
+					decoded = await decodeText(bytes, props.tab.encodingChoice);
 				} catch {
+					if (signal.aborted) return;
+					props.tab.text = undefined;
 					state.value = 'invalidText';
 					return;
 				}
+				if (signal.aborted) return;
 				const data = new Uint8Array(bytes);
-				const text = decoded.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+				const lineEnding = decoded.text.match(/\r\n|\r|\n/u)?.[0];
+				const text = decoded.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 				props.tab.text = {
 					original: text,
 					draft: text,
 					hash: bytesToHex(sha256(data)),
-					bom: data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf,
-					lineEnding: decoded.includes('\r\n') ? '\r\n' : '\n',
+					bom: decoded.bom,
+					encoding: decoded.encoding,
+					lineEnding: lineEnding === '\r\n' || lineEnding === '\r' ? lineEnding : '\n',
 				};
 			}
 			state.value = 'ready';
@@ -115,8 +151,27 @@
 	}
 
 	function reload() {
+		pendingEncoding.value = undefined;
 		if (dirty.value) reloadPrompt.value = true;
 		else void load();
+	}
+
+	function chooseEncoding(value: unknown) {
+		if (typeof value !== 'string' || (value !== 'auto' && !Object.hasOwn(textEncodings, value))) return;
+		const choice = value as EncodingChoice;
+		if (choice === props.tab.encodingChoice || props.tab.saving) return;
+		if (dirty.value) {
+			pendingEncoding.value = choice;
+			reloadPrompt.value = true;
+		} else {
+			props.tab.encodingChoice = choice;
+			void load();
+		}
+	}
+
+	function confirmReload() {
+		if (pendingEncoding.value) props.tab.encodingChoice = pendingEncoding.value;
+		void load();
 	}
 
 	async function save() {
@@ -124,20 +179,23 @@
 		const text = tab.text;
 		if (!text || !dirty.value || tab.saving || active.aborted || state.value !== 'ready') return;
 		const draft = text.draft;
-		const encoded = new TextEncoder().encode((text.bom ? '\uFEFF' : '') + draft.replaceAll('\n', text.lineEnding));
-		if (encoded.byteLength > tab.format.maxBytes) {
-			saveStatus.value = 'tooLarge';
-			return;
-		}
 		tab.saving = true;
 		saveStatus.value = undefined;
 		try {
+			const encoded = await encodeText(draft.replaceAll('\n', text.lineEnding), text.encoding, text.bom);
+			if (active.aborted) return;
+			if (encoded.byteLength > tab.format.maxBytes) {
+				saveStatus.value = 'tooLarge';
+				return;
+			}
 			await tab.file.save(new Blob([encoded]), text.hash, active);
 			text.original = draft;
 			text.hash = bytesToHex(sha256(encoded));
 			saveStatus.value = 'saved';
 		} catch (cause) {
-			if (!active.aborted)
+			if (active.aborted) return;
+			if (cause instanceof UnrepresentableTextError) saveStatus.value = 'unrepresentable';
+			else
 				saveStatus.value =
 					typeof cause === 'object' && cause !== null && 'code' in cause
 						? cause.code === 'WORKSPACE_CONFLICT'
@@ -215,12 +273,18 @@
 				:data-split="tab.mode === 'split' || undefined"
 			>
 				<CodeEditor
-					v-show="tab.mode !== 'preview'"
+					v-show="editorVisible"
+					ref="codeEditor"
 					v-model="tab.text.draft"
 					:language="editor"
 					:label="copy.edit"
+					:read-only="tab.mode === 'preview'"
 				/>
-				<div v-if="tab.mode !== 'edit'" class="file-preview__body" data-ui-selection="text">
+				<div
+					v-if="tab.mode !== 'edit' && tab.format.kind !== 'text'"
+					class="file-preview__body"
+					data-ui-selection="text"
+				>
 					<article v-if="tab.format.kind === 'markdown'" class="file-preview__markdown" v-html="markdown" />
 					<template v-else-if="tab.format.kind === 'csv'">
 						<div v-if="columns > columnPageSize" class="file-preview__column-tools">
@@ -255,7 +319,6 @@
 							</tbody>
 						</table>
 					</template>
-					<pre v-else>{{ source }}</pre>
 				</div>
 			</div>
 		</template>
@@ -265,10 +328,23 @@
 			<div class="file-preview__info" :title="saveStatus ? copy.feedback[saveStatus] : tab.file.path">
 				<span v-if="saveStatus" role="status">{{ copy.feedback[saveStatus] }}</span>
 				<span v-else-if="imageSize">{{ imageSize.width }} × {{ imageSize.height }}</span>
-				<span v-else-if="tab.text">UTF-8 · {{ tab.text.lineEnding === '\r\n' ? 'CRLF' : 'LF' }}</span>
+				<span v-else-if="tab.text"
+					>{{ textEncodings[tab.text.encoding] }} · {{ lineEndings[tab.text.lineEnding]
+					}}<template v-if="tab.mode === 'preview'"> · {{ copy.readOnly }}</template></span
+				>
 				<span v-else>{{ tab.file.path }}</span>
 			</div>
 			<div class="file-preview__tools">
+				<UiSelect
+					v-if="editor"
+					class="file-preview__encoding"
+					density="compact"
+					:model-value="tab.encodingChoice"
+					:options="encodingOptions"
+					:aria-label="copy.encoding"
+					:disabled="state === 'loading' || tab.saving"
+					@update:model-value="chooseEncoding"
+				/>
 				<div
 					v-if="editor && state === 'ready'"
 					class="file-preview__modes"
@@ -345,6 +421,17 @@
 					/></UiButton>
 				</template>
 				<UiButton
+					v-if="editor && editorVisible && state === 'ready'"
+					appearance="ghost"
+					density="compact"
+					icon-only
+					:aria-label="copy.find"
+					:title="copy.find"
+					:disabled="!codeEditor"
+					@click="codeEditor?.openSearch()"
+					><Search :size="15"
+				/></UiButton>
+				<UiButton
 					v-if="editor && tab.text && state === 'ready'"
 					appearance="ghost"
 					density="compact"
@@ -382,7 +469,7 @@
 			<p>{{ copy.discardQuestion }}</p>
 			<template #footer>
 				<UiButton appearance="ghost" @click="reloadPrompt = false">{{ copy.cancel }}</UiButton>
-				<UiButton tone="danger" @click="load">{{ copy.discard }}</UiButton>
+				<UiButton tone="danger" @click="confirmReload">{{ copy.discard }}</UiButton>
 			</template>
 		</UiDialog>
 	</section>
@@ -549,6 +636,22 @@
 		align-items: center;
 		gap: 2px;
 		flex: none;
+	}
+	.file-preview__encoding {
+		max-width: 130px;
+		margin-inline-end: 4px;
+	}
+	@container file-preview (max-width: 390px) {
+		.file-preview__footer {
+			flex-wrap: wrap;
+		}
+		.file-preview__info {
+			flex-basis: 100%;
+		}
+		.file-preview__tools {
+			flex: 1 1 auto;
+			flex-wrap: wrap;
+		}
 	}
 	.file-preview__modes {
 		margin-inline-end: 4px;

@@ -57,14 +57,8 @@ export const TerminalColorsSchema = z
 
 export const ThemeInputSchema = z.strictObject({ name, colors: TerminalColorsSchema });
 
-/** Accept current named themes and the plain xterm palettes exported by the original application. */
-export const ThemeFileEntrySchema = z.union([
-	ThemeInputSchema,
-	TerminalColorsSchema.transform((colors) => ({ name: undefined, colors })),
-]);
-
 export const ThemeFileSchema = z
-	.union([ThemeFileEntrySchema, z.array(ThemeFileEntrySchema).min(1).max(50)])
+	.union([ThemeInputSchema, z.array(ThemeInputSchema).min(1).max(50)])
 	.transform((value) => (Array.isArray(value) ? value : [value]));
 
 export const LocalEchoModeSchema = z.enum(['off', 'auto', 'on']);
@@ -75,12 +69,16 @@ export const WorkspacePreferencesSchema = z.strictObject({
 	/** null selects the built-in terminal palette; host UI mode never selects terminal colors. */
 	theme: z.string().min(1).max(120).nullable(),
 	/** Auto predicts only after observing slow remote echoes; never predicts composition candidates. */
-	localEcho: LocalEchoModeSchema.default('auto'),
-	/** Applies to file, folder and batch deletion from menus or keyboard shortcuts. Old records stay protected. */
-	confirmFileDeletion: z.boolean().default(true),
+	localEcho: LocalEchoModeSchema,
+	/** Applies to file, folder and batch deletion from menus or keyboard shortcuts. */
+	confirmFileDeletion: z.boolean(),
 	/** Applies only to Workspace terminals, including future connections. */
-	display: TerminalDisplaySchema.prefault({}),
+	display: TerminalDisplaySchema,
 });
+
+export function createDefaultWorkspacePreferences(): z.infer<typeof WorkspacePreferencesSchema> {
+	return { theme: null, localEcho: 'auto', confirmFileDeletion: true, display: TerminalDisplaySchema.parse({}) };
+}
 
 const meta = { id: z.uuid(), version: z.number().int().positive() };
 

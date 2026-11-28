@@ -1,35 +1,17 @@
 <script setup lang="ts">
+	import '../../../../shared/browser/catalog.css';
 	import { useI18n } from 'vue-i18n';
 	import { computed, onMounted, ref, watch, watchEffect, type Ref } from 'vue';
 	import { messages } from './messages.js';
-	import {
-		Server,
-		Terminal,
-		Monitor,
-		ScreenShare,
-		Search,
-		Plus,
-		RefreshCw,
-		Ellipsis,
-		Copy,
-		Trash2,
-	} from '@lucide/vue';
-	import {
-		UiInput,
-		UiButton,
-		UiCard,
-		UiEmptyState,
-		UiDialog,
-		UiDropdownMenu,
-		UiSelect,
-	} from 'nexus-terminal/browser/ui';
+	import { Server, Terminal, Monitor, ScreenShare, Search, Plus, RefreshCw, Copy, Trash2 } from '@lucide/vue';
+	import { UiInput, UiButton, UiCard, UiEmptyState, UiDialog, UiSelect } from 'nexus-terminal/browser/ui';
 	import type { PluginWindowProps } from 'nexus-terminal/browser';
 	import { ConnectionTypeSchema, type Connection, type ConnectionEditorRequest } from '../shared/connection-types';
 	import { useConnections } from './connections-view.js';
 	import { connectionAddress as address } from './connection-presentation';
 	import ConnectionEditor from './ConnectionEditor.vue';
 	const props = defineProps<PluginWindowProps & { label: Ref<string> }>();
-	const { t } = useI18n({ useScope: 'local', messages });
+	const { t, n } = useI18n({ useScope: 'local', messages });
 	watchEffect(() => (props.label.value = t('title')));
 	const client = useConnections();
 	const { catalog, loaded, requests, credentials } = client;
@@ -96,16 +78,6 @@
 		...catalog.value.tags.map(({ id, name }) => ({ value: id, label: name })),
 	]);
 	const activeTagName = computed(() => catalog.value.tags.find((item) => item.id === tag.value)?.name);
-	const visibleTagLimit = 2;
-
-	// 卡片标签行固定一行：当前筛选的标签优先展示，其余折叠为 +N。
-	function visibleTags(item: Connection): string[] {
-		const name = activeTagName.value;
-		const ordered =
-			name && item.tags.includes(name) ? [name, ...item.tags.filter((other) => other !== name)] : item.tags;
-		return ordered.slice(0, visibleTagLimit);
-	}
-
 	const hasFilters = computed(() => Boolean(search.value.trim() || type.value !== 'all' || tag.value !== 'all'));
 
 	function clearFilters() {
@@ -122,6 +94,10 @@
 			: item.credentialId
 				? (usernames.value.get(item.credentialId) ?? '')
 				: item.username;
+	}
+
+	function displayAddress(item: Connection): string {
+		return address({ ...item, username: username(item) });
 	}
 
 	watch(
@@ -142,14 +118,13 @@
 				(!query || [item.name, item.host, username(item)].some((value) => value.toLowerCase().includes(query))),
 		);
 	});
-	const actions = computed(() => [
-		{ id: 'duplicate', label: t('duplicate'), icon: Copy },
-		{ id: 'delete', label: t('delete'), icon: Trash2, tone: 'danger' as const },
-	]);
 
-	function selectAction(action: string, item: Connection) {
-		if (action === 'duplicate') editor.value = { connection: item, duplicate: true };
-		else if (action === 'delete') pending.value = item;
+	function openDesktop(item: Connection) {
+		try {
+			client.openDesktop(item.id);
+		} catch (cause) {
+			client.report(cause, signal);
+		}
 	}
 
 	onMounted(() => {
@@ -178,10 +153,23 @@
 	}
 </script>
 <template>
-	<section class="connections-app" :aria-label="t('title')" data-ui-selection="none">
-		<header v-if="!loaded || catalog.connections.length" class="connections-toolbar">
-			<div class="connections-toolbar-filters">
-				<div class="connections-search">
+	<section class="connections-app plugin-catalog" :aria-label="t('title')" data-ui-selection="none">
+		<header class="plugin-catalog__header">
+			<div class="plugin-catalog__identity">
+				<h2>{{ t('catalogTitle') }}</h2>
+				<span
+					v-if="loaded"
+					class="plugin-catalog__count"
+					:aria-label="t('catalogCount', { shown: entries.length, total: catalog.connections.length })"
+				>
+					{{ n(entries.length)
+					}}<template v-if="entries.length !== catalog.connections.length">
+						/ {{ n(catalog.connections.length) }}</template
+					>
+				</span>
+			</div>
+			<div v-if="!loaded || catalog.connections.length" class="plugin-catalog__tools">
+				<div class="plugin-catalog__search">
 					<UiInput v-model="search" :placeholder="t('searchShort')" :aria-label="t('search')"
 						><template #leading><Search :size="16" /></template
 					></UiInput>
@@ -200,12 +188,12 @@
 					:aria-label="t('tags')"
 				/>
 			</div>
-			<div class="connections-toolbar-actions">
+			<div v-if="!loaded || catalog.connections.length" class="plugin-catalog__actions">
 				<UiButton tone="primary" appearance="solid" @click="editor = {}"
 					><template #leading><Plus :size="15" /></template>{{ t('add') }}</UiButton
 				>
 				<UiButton
-					appearance="ghost"
+					appearance="soft"
 					icon-only
 					:loading="loading"
 					loading-animation="icon"
@@ -216,50 +204,56 @@
 			</div>
 		</header>
 		<div
-			class="connections-list"
+			class="connections-list plugin-catalog__list"
 			:data-first="(loaded && !catalog.connections.length) || undefined"
 			:aria-busy="loading"
 		>
 			<UiCard
 				v-for="item in entries"
 				:key="item.id"
-				class="connections-card"
+				class="connections-card plugin-catalog__card"
 				:data-type="item.type"
 				:title="item.name"
-				:description="address({ ...item, username: username(item) })"
+				:description="displayAddress(item)"
+				:action-label="t('edit') + ' · ' + item.name"
 				:icon="icons[item.type]"
 				:tone="item.type === 'ssh' ? 'primary' : item.type === 'rdp' ? 'success' : 'neutral'"
 				@select="editor = { connection: item }"
 			>
-				<template #badge>
+				<template #title-end>
 					<span class="connections-type" :data-type="item.type">{{ t('types.' + item.type) }}</span>
 				</template>
-				<template v-if="item.tags.length" #tags>
-					<span
-						v-for="name in visibleTags(item)"
-						:key="name"
-						:title="name"
-						class="connections-tag"
-						:data-active="name === activeTagName || undefined"
-						>{{ name }}</span
-					>
-					<span
-						v-if="item.tags.length > visibleTagLimit"
-						class="connections-tag-more"
-						:title="item.tags.join(', ')"
-						>+{{ item.tags.length - visibleTagLimit }}</span
-					>
-				</template>
 				<template #actions>
-					<UiDropdownMenu :items="actions" @select="selectAction($event, item)">
-						<UiButton appearance="ghost" icon-only :aria-label="t('actions') + ' · ' + item.name"
-							><Ellipsis :size="18"
-						/></UiButton>
-					</UiDropdownMenu>
+					<UiButton
+						v-if="item.type !== 'ssh' && client.desktopAvailable.value"
+						appearance="ghost"
+						icon-only
+						:title="t('openDesktop')"
+						:aria-label="t('openDesktop') + ' · ' + item.name"
+						@click="openDesktop(item)"
+						><Monitor :size="16"
+					/></UiButton>
+					<UiButton
+						appearance="ghost"
+						icon-only
+						:title="t('duplicate')"
+						:aria-label="t('duplicate') + ' · ' + item.name"
+						@click="editor = { connection: item, duplicate: true }"
+						><Copy :size="16"
+					/></UiButton>
+					<UiButton
+						appearance="ghost"
+						tone="danger"
+						icon-only
+						:title="t('delete')"
+						:aria-label="t('delete') + ' · ' + item.name"
+						@click="pending = item"
+						><Trash2 :size="16"
+					/></UiButton>
 				</template>
 			</UiCard>
 			<UiEmptyState
-				class="connections-empty"
+				class="connections-empty plugin-catalog__empty"
 				v-if="loaded && !entries.length"
 				:icon="catalog.connections.length ? Search : Server"
 				:title="t(catalog.connections.length ? 'noResults' : 'empty')"

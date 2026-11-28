@@ -37,6 +37,7 @@ export function useWorkspaceSessions(props: {
 
 	const busySessions = ref<Record<string, boolean>>({});
 	const connectionsLoaded = computed(() => readConnectionsState(false, (client) => client.loaded.value));
+	const desktopAvailable = computed(() => readConnectionsState(false, (client) => client.desktopAvailable.value));
 	const connectionsReadFailed = ref(false);
 	let readConnections: (() => Promise<void>) | undefined;
 	const confirmOpen = ref(false);
@@ -51,7 +52,7 @@ export function useWorkspaceSessions(props: {
 		try {
 			return read(client);
 		} catch (cause) {
-			// Older hosts can invalidate the proxy before aborting the binding.
+			// The proxy can expire before the dependency binding is disposed.
 			if (cause instanceof Error && 'code' in cause && cause.code === 'PLUGIN_SERVICE_EXPIRED') return fallback;
 			throw cause;
 		}
@@ -399,6 +400,7 @@ export function useWorkspaceSessions(props: {
 		credentials,
 		canCreateConnection,
 		connectionsLoaded,
+		desktopAvailable,
 		connectionsReadFailed,
 		retryConnections,
 		savedConnections,

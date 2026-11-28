@@ -3,9 +3,13 @@ packages:
 
 # Plugin manifests describe host peers; development dependencies live at the root.
 # Install explicitly with the frozen lockfile before building or testing.
+autoInstallPeers: false
 verifyDepsBeforeRun: false
 
 allowBuilds:
   esbuild: true
   cpu-features: false
   ssh2: false
+
+patchedDependencies:
+  guacamole-common-js@1.6.0: patches/guacamole-common-js@1.6.0.patch

@@ -1,107 +1,20 @@
 .connections-app {
-	display: flex;
-	flex-direction: column;
-	height: 100%;
-	min-height: 0;
-	color: var(--ui-text);
-	container-type: inline-size;
-	user-select: none;
+	--catalog-accent: var(--ui-primary);
 	--_proto-ssh: var(--ui-primary);
 	--_proto-rdp: var(--ui-success, #326b58);
 	--_proto-vnc: var(--ui-app-cyan, #167b92);
 }
 
-.connections-toolbar {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	flex: none;
-	padding: 14px 20px;
-	border-bottom: 1px solid var(--ui-border-subtle, var(--ui-border));
-}
-.connections-toolbar-filters {
-	display: flex;
-	flex: 1;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-}
-.connections-search {
-	flex: 1 1 180px;
-	min-width: 0;
-}
-.connections-toolbar-actions {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex: none;
-	margin-inline-start: auto;
-}
-.connections-type-filter {
-	flex: none;
-}
 .connections-tag-filter {
-	max-width: 150px;
+	max-width: min(160px, 100%);
 }
 
-.connections-list {
-	flex: 1;
-	min-height: 0;
-	overflow: auto;
-	overscroll-behavior: contain;
-	padding: 16px 20px 24px;
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
-	align-content: start;
-	gap: 12px;
-}
-.connections-list[data-first] {
-	align-content: safe center;
-}
-.connections-list .connections-empty {
-	grid-column: 1 / -1;
-}
-.connections-list[data-first] .connections-empty {
-	justify-self: center;
-	width: min(100%, 400px);
-	padding: 26px 16px;
-	border: 1px solid var(--ui-border);
-	border-radius: 12px;
-	background: var(--ui-surface);
-}
-.connections-list[data-first] .ui-empty-state__icon {
-	width: 46px;
-	height: 46px;
-	border-radius: 11px;
-	color: var(--ui-primary);
-	background: color-mix(in srgb, var(--ui-primary) 10%, transparent);
-}
 .connections-tag-selection {
 	display: flex;
 	gap: 5px;
 	flex-wrap: wrap;
 }
 
-/* 连接卡片：图标 + 名称 / 地址 / 协议与标签三行，标签行常驻保证等高。 */
-.connections-card.ui-card {
-	--ui-card-padding: 14px;
-	--ui-card-radius: 12px;
-}
-.connections-card.ui-card .ui-card__main {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr);
-	align-content: start;
-	gap: 10px;
-}
-.connections-card.ui-card .ui-card__icon {
-	width: 36px;
-	height: 36px;
-	border-radius: 9px;
-}
-.connections-card.ui-card .ui-card__icon svg {
-	width: 19px;
-	height: 19px;
-}
 .connections-card[data-type='vnc'] .ui-card__icon {
 	color: var(--_proto-vnc);
 	background: color-mix(in srgb, var(--_proto-vnc) 12%, transparent);
@@ -109,27 +22,10 @@
 .connections-card[data-type='vnc']:hover {
 	border-color: color-mix(in srgb, var(--_proto-vnc) 38%, var(--ui-border));
 }
-.connections-card.ui-card .ui-card__body {
-	gap: 4px;
+.connections-card .ui-card__description {
+	font-variant-numeric: tabular-nums;
 }
-.connections-card.ui-card .ui-card__body > strong {
-	font-size: 14px;
-	line-height: 20px;
-}
-.connections-card.ui-card .ui-card__description {
-	font-size: 12px;
-	line-height: 18px;
-}
-.connections-card.ui-card .ui-card__description {
-	font-family: var(--ui-font-mono, ui-monospace, monospace);
-}
-.connections-card.ui-card .ui-card__tags {
-	flex-wrap: nowrap;
-	margin-top: 5px;
-}
-.connections-type,
-.connections-card.ui-card .connections-tag,
-.connections-tag-more {
+.connections-type {
 	box-sizing: border-box;
 	display: inline-flex;
 	align-items: center;
@@ -144,8 +40,7 @@
 }
 .connections-type {
 	--_proto: var(--_proto-ssh);
-	font-family: var(--ui-font-mono, ui-monospace, monospace);
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 650;
 	letter-spacing: 0.04em;
 	color: var(--_proto);
@@ -156,50 +51,6 @@
 }
 .connections-type[data-type='vnc'] {
 	--_proto: var(--_proto-vnc);
-}
-.connections-card.ui-card .connections-tag {
-	flex: 0 1 auto;
-	min-width: 0;
-	max-width: 110px;
-	gap: 0;
-	background: color-mix(in srgb, var(--ui-text) 5%, transparent);
-	color: var(--ui-muted);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	display: inline-block;
-	line-height: 20px;
-}
-.connections-card.ui-card .connections-tag[data-active] {
-	background: color-mix(in srgb, var(--ui-primary) 13%, transparent);
-	color: var(--ui-primary);
-}
-.connections-tag-more {
-	padding: 0 4px;
-	color: var(--ui-muted);
-	font-variant-numeric: tabular-nums;
-}
-.connections-card.ui-card .ui-card__side {
-	position: absolute;
-	inset-block-start: 14px;
-	inset-inline-end: 10px;
-	flex-direction: row;
-	align-items: center;
-	gap: 5px;
-	height: 36px;
-	padding: 0;
-}
-.connections-card.ui-card .ui-card__badge {
-	display: flex;
-	align-items: center;
-}
-.connections-card.ui-card .ui-card__actions {
-	margin: 0;
-}
-.connections-card.ui-card .ui-card__actions .ui-button {
-	color: var(--ui-muted);
-}
-.connections-card.ui-card .ui-card__actions .ui-button:is(:hover, :focus-visible, [aria-expanded='true']) {
-	color: var(--ui-text);
 }
 .connections-tag {
 	display: inline-flex;
@@ -371,26 +222,6 @@
 .connections-tag-create {
 	justify-content: flex-start;
 	color: var(--ui-primary);
-}
-@container (max-width: 640px) {
-	.connections-toolbar {
-		padding: 12px;
-		gap: 8px;
-	}
-	.connections-list {
-		padding: 12px;
-	}
-}
-@container (max-width: 560px) {
-	.connections-toolbar {
-		flex-wrap: wrap;
-	}
-	.connections-toolbar-filters {
-		display: contents;
-	}
-	.connections-search {
-		flex-basis: 100%;
-	}
 }
 @container (max-width: 400px) {
 	.connections-tag-filter {

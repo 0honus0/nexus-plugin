@@ -453,7 +453,7 @@
 						/>
 					</UiField>
 					<template v-else>
-						<UiField :label="t('credentialPrivateKey')" :hint="t('uploadPrivateKeyHint')" v-slot="field">
+						<UiField :label="t('credentialPrivateKey')" v-slot="field">
 							<textarea
 								v-model="inlineCredential.privateKey"
 								:id="field.id"
@@ -499,7 +499,7 @@
 			<UiField v-if="connectionDefaults[draft.type].domain" :label="t('domain')" v-slot="field"
 				><UiInput v-model="draft.domain" :id="field.id" maxlength="120" :disabled="saving"
 			/></UiField>
-			<UiField :label="t('tags')" :hint="t('tagHint')" v-slot="field"
+			<UiField :label="t('tags')" v-slot="field"
 				><TagPicker
 					v-model="draft.tags"
 					:input-id="field.id"

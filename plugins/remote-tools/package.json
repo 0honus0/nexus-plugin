@@ -1,6 +1,6 @@
 {
   "name": "@nexus-terminal/remote-tools",
-  "version": "0.0.1-dev.2",
+  "version": "0.0.1",
   "type": "module",
   "description": "Run remote commands, manage archives and read server status",
   "files": [
@@ -30,7 +30,7 @@
     "test": "pnpm build && vitest run"
   },
   "peerDependencies": {
-    "nexus-terminal": "^1.1.0"
+    "nexus-terminal": "^1.2.0"
   },
   "nexus": {
     "kind": "extension",
@@ -39,7 +39,7 @@
       "backend": "dist/node/index.js"
     },
     "dependsOn": {
-      "@nexus-terminal/ssh": "^0.0.1-dev.1"
+      "@nexus-terminal/ssh": "^0.0.1"
     },
     "i18n": {
       "zh-CN": {

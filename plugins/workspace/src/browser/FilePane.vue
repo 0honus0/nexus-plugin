@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, ref, watch, nextTick } from 'vue';
+	import { computed, inject, ref, watch, nextTick } from 'vue';
 	import { useDropZone, useClipboard } from '@vueuse/core';
 	import {
 		Search,
@@ -26,12 +26,14 @@
 		Send,
 		Shield,
 	} from '@lucide/vue';
-	import { UiButton, UiInput, UiEmptyState, UiDropdownMenu, UiContextMenu } from 'nexus-terminal/browser/ui';
+	import { UiButton, UiInput, UiDropdownMenu } from 'nexus-terminal/browser/ui';
 	import type { UiMenuItem } from 'nexus-terminal/browser/ui';
 	import type { PluginContextApi } from 'nexus-terminal/browser';
 	import type { PluginWindowApi } from 'nexus-terminal/browser';
 	import type { WorkspaceI18n } from './workspace-i18n';
 	import type { FileManagerOpenFile } from './file-manager-api.js';
+	import { fileListKey } from './file-list-key';
+	import DefaultFileList from '#file-list';
 	import type { FileEntry } from '../shared/workspace-file-types';
 	import { TerminalDirectorySchema } from '../shared/workspace-file-operation-types';
 	import { useFileSearch } from './files/use-file-search';
@@ -58,6 +60,8 @@
 	}>();
 	const emit = defineEmits<{ busy: [value: boolean]; fileOpened: [] }>();
 	const { t } = props.i18n;
+	const suppliedFileList = inject(fileListKey);
+	const fileList = computed(() => suppliedFileList?.value ?? DefaultFileList);
 	const signal = AbortSignal.any([props.ctx.signal, props.view.signal]);
 	const client = createWorkspaceClient(props.ctx, signal),
 		shared = useWorkspaceFilesState();
@@ -80,6 +84,8 @@
 	const browserSearch = useFileSearch(props.ctx, props.sessionId, path, props.view.signal);
 	const { query: search, searching, truncated } = browserSearch;
 	const surface = ref<HTMLElement>(),
+		searchTrigger = ref<InstanceType<typeof UiButton>>(),
+		searchDock = ref<HTMLElement>(),
 		searchExpanded = ref(false),
 		showHidden = ref(false),
 		sort = ref('name');
@@ -407,7 +413,8 @@
 		const key = event.key.toLowerCase(),
 			mod = event.ctrlKey || event.metaKey;
 		const entry = visibleRows.value.find((e) => e.path === selected.value.at(-1));
-		if (mod && key === 'c')
+		if (mod && key === 'f' && props.enabled && loaded.value) action = showSearch;
+		else if (mod && key === 'c')
 			action = () => {
 				if (selectedEntries.value.length)
 					shared.copy(
@@ -480,6 +487,20 @@
 	function closeSearch() {
 		search.value = '';
 		searchExpanded.value = false;
+		void nextTick(() => searchTrigger.value?.$el.focus({ preventScroll: true }));
+	}
+
+	function clearSearch() {
+		if (search.value) {
+			search.value = '';
+			void showSearch();
+		} else closeSearch();
+	}
+
+	function submitSearch(event: KeyboardEvent) {
+		if (event.isComposing) return;
+		event.preventDefault();
+		void browserSearch.search();
 	}
 
 	const { isOverDropZone } = useDropZone(surface, {
@@ -498,6 +519,16 @@
 			if (dropped?.length) void files.upload(dropped);
 		},
 	});
+
+	function activateWithKeyboard(entry: FileEntry, event: KeyboardEvent) {
+		if (isParent(entry)) {
+			event.preventDefault();
+			up();
+		} else if (props.openFile && entry.kind === 'file') {
+			event.preventDefault();
+			void activateFile(entry);
+		}
+	}
 
 	function size(bytes: number) {
 		const unit = bytes < 1024 ? 'B' : bytes < 1024 ** 2 ? 'KiB' : bytes < 1024 ** 3 ? 'MiB' : 'GiB';
@@ -526,7 +557,7 @@
 				:navigate="files.load"
 			/>
 			<div class="workspace-file-tools">
-				<template v-if="!searchExpanded">
+				<template v-if="filesOnly || !searchExpanded">
 					<UiButton
 						class="workspace-file-upload workspace-panel-primary"
 						:appearance="filesOnly ? 'solid' : 'soft'"
@@ -551,15 +582,23 @@
 							@click="files.load()"
 							><RefreshCw :size="16"
 						/></UiButton>
-						<UiButton
-							appearance="ghost"
-							icon-only
-							:aria-label="t('searchFiles')"
-							:title="t('searchFiles')"
-							:disabled="!enabled || !loaded"
-							@click="showSearch"
-							><Search :size="16"
-						/></UiButton>
+						<Teleport
+							v-if="!searchExpanded && (!filesOnly || searchDock)"
+							:to="searchDock"
+							:disabled="!filesOnly"
+						>
+							<UiButton
+								ref="searchTrigger"
+								class="workspace-file-search-trigger"
+								appearance="ghost"
+								icon-only
+								:aria-label="t('searchFiles')"
+								:title="t('searchFiles')"
+								:disabled="!enabled || !loaded"
+								@click="showSearch"
+								><Search :size="16"
+							/></UiButton>
+						</Teleport>
 					</div>
 					<div class="workspace-tool-group">
 						<UiDropdownMenu
@@ -607,33 +646,49 @@
 						/></UiButton>
 					</div>
 				</template>
-				<form
-					v-else
-					class="workspace-file-search"
-					@submit.prevent="browserSearch.search()"
-					@keydown.esc.stop.prevent="closeSearch"
-				>
-					<UiButton
-						type="submit"
-						appearance="ghost"
-						icon-only
+				<Teleport v-if="searchExpanded && (!filesOnly || searchDock)" :to="searchDock" :disabled="!filesOnly">
+					<form
+						class="workspace-file-search"
+						role="search"
 						:aria-label="t('searchFiles')"
-						:title="t('searchFiles')"
-						:loading="searching"
-						><Search :size="16"
-					/></UiButton>
-					<div class="workspace-file-search-input">
-						<UiInput v-model="search" :aria-label="t('searchFiles')" :placeholder="t('searchFiles')" />
-					</div>
-					<UiButton
-						appearance="ghost"
-						icon-only
-						:aria-label="t('closeSearch')"
-						:title="t('closeSearch')"
-						@click="closeSearch"
-						><X :size="16"
-					/></UiButton>
-				</form>
+						@submit.prevent="browserSearch.search()"
+						@keydown.esc.stop.prevent="closeSearch"
+					>
+						<UiInput
+							v-model="search"
+							type="search"
+							:aria-label="t('searchFiles')"
+							:placeholder="t('searchFiles')"
+							autocomplete="off"
+							@keydown.enter="submitSearch"
+						>
+							<template #leading>
+								<UiButton
+									class="workspace-file-search-action workspace-file-search-submit"
+									type="submit"
+									appearance="ghost"
+									icon-only
+									:aria-label="t('searchFiles')"
+									:title="t('searchFiles')"
+									:disabled="!search.trim()"
+									:loading="searching"
+									><Search :size="15"
+								/></UiButton>
+							</template>
+							<template #trailing>
+								<UiButton
+									class="workspace-file-search-action"
+									appearance="ghost"
+									icon-only
+									:aria-label="t(search ? 'clearSearch' : 'closeSearch')"
+									:title="t(search ? 'clearSearch' : 'closeSearch')"
+									@click="clearSearch"
+									><X :size="15"
+								/></UiButton>
+							</template>
+						</UiInput>
+					</form>
+				</Teleport>
 				<div class="workspace-tool-group">
 					<PathFavorites
 						:path="path"
@@ -647,100 +702,49 @@
 		<p v-if="browserSearch.active.value && truncated" class="workspace-search-limit">
 			{{ t('searchTruncated') }}
 		</p>
-		<div class="workspace-file-viewport">
-			<div v-if="filesOnly" class="workspace-file-columns">
-				<span>{{ t('sortName') }}</span>
-				<span class="workspace-file-size">{{ t('fileSize') }}</span>
-				<span class="workspace-file-modified">{{ t('fileModified') }}</span>
-			</div>
-			<UiContextMenu
-				:items="entryItems(context)"
-				:disabled="!enabled || !loaded || directoryChanging || mutating"
-				@select="menuAction($event, context)"
-			>
-				<div
-					class="workspace-file-list"
-					:style="fileScaleStyle"
-					:aria-busy="loading || searching"
-					tabindex="0"
-					@pointerdown.capture="context = undefined"
-					@contextmenu.capture="context = undefined"
-				>
-					<button
-						v-for="entry in visibleRows"
-						:key="entry.path"
-						v-memo="[
-							entry,
-							selectedPaths.has(entry.path),
-							cutPaths.has(entry.path),
-							enabled,
-							i18n.language.value,
-						]"
-						class="workspace-file-row"
-						:class="{
-							'is-parent': isParent(entry),
-							'is-directory': entry.kind === 'directory' && !isParent(entry),
-							'is-selected': selectedPaths.has(entry.path),
-							'is-cut': cutPaths.has(entry.path),
-						}"
-						:aria-label="isParent(entry) ? t('parentDirectory') : displayName(entry)"
-						:aria-pressed="selectedPaths.has(entry.path)"
-						:disabled="!enabled"
-						@click="select(entry, $event)"
-						@dblclick="doubleClick(entry, $event)"
-						@keydown.enter="
-							(event) => {
-								if (isParent(entry)) {
-									event.preventDefault();
-									up();
-								} else if (openFile && entry.kind === 'file') {
-									event.preventDefault();
-									void activateFile(entry);
-								}
-							}
-						"
-						@contextmenu="prepareContext(entry)"
-						@pointerdown="context = entry"
-						@pointerenter="prefetchEntry(entry, $event)"
-						@pointerleave="files.cancelPrefetch"
-					>
-						<FileIcon v-if="!isParent(entry)" :name="entry.name" :kind="entry.kind" /><span
-							class="workspace-file-name"
-							:title="displayName(entry)"
-							>{{ displayName(entry) }}</span
-						><span class="workspace-file-size">{{
-							isParent(entry)
-								? ''
-								: entry.kind === 'directory'
-									? filesOnly
-										? '—'
-										: t('directory')
-									: size(entry.size)
-						}}</span>
-						<span v-if="filesOnly && !isParent(entry)" class="workspace-file-modified">{{
-							entry.modifiedAt ? modifiedDate.format(entry.modifiedAt) : '—'
-						}}</span>
-					</button>
-					<UiEmptyState
-						class="workspace-panel-empty"
-						v-if="
-							loaded &&
-							!rows.length &&
-							!searching &&
-							(!browserSearch.active.value || browserSearch.entries.value !== undefined)
-						"
-						:title="t(browserSearch.active.value ? 'noFilesMatch' : 'emptyDirectory')"
-						:icon="Folder"
-					/>
-				</div>
-			</UiContextMenu>
-		</div>
+		<component
+			:is="fileList"
+			:entries="visibleRows"
+			:selected-paths="selectedPaths"
+			:cut-paths="cutPaths"
+			:files-only="filesOnly"
+			:enabled="enabled"
+			:busy="loading || searching"
+			:menu-disabled="!enabled || !loaded || directoryChanging || mutating"
+			:menu-items="entryItems(context)"
+			:empty-title="
+				loaded &&
+				!rows.length &&
+				!searching &&
+				(!browserSearch.active.value || browserSearch.entries.value !== undefined)
+					? t(browserSearch.active.value ? 'noFilesMatch' : 'emptyDirectory')
+					: undefined
+			"
+			:file-scale-style="fileScaleStyle"
+			:locale="i18n.language.value"
+			:t="t"
+			:is-parent="isParent"
+			:display-name="displayName"
+			:size="size"
+			:modified-date="(time: number) => modifiedDate.format(time)"
+			@menu="menuAction($event, context)"
+			@select="select"
+			@open="doubleClick"
+			@enter="activateWithKeyboard"
+			@context="context = $event"
+			@prepare="prepareContext"
+			@prefetch="prefetchEntry"
+			@cancel-prefetch="files.cancelPrefetch"
+		>
+			<template #icon="{ entry }"><FileIcon :name="entry.name" :kind="entry.kind" /></template>
+		</component>
 		<footer v-if="filesOnly && loaded" class="workspace-file-status">
-			{{
+			<span>{{
 				t(selectedEntries.length ? 'filesMenu.selected' : 'fileCount', {
 					count: selectedEntries.length || rows.length,
 				})
-			}}
+			}}</span>
+			<div ref="searchDock" class="workspace-file-status-search" />
 		</footer>
 		<div v-if="isOverDropZone && enabled && loaded && !busy" class="workspace-file-drop" aria-hidden="true">
 			<Upload :size="30" /><span>{{ t('dropFiles') }}</span>
@@ -762,7 +766,7 @@
 		gap: 8px;
 	}
 	.workspace-file-header:has(.workspace-file-search) {
-		grid-template-columns: minmax(0, 1fr) minmax(220px, 42%);
+		grid-template-columns: minmax(0, 1fr) minmax(260px, 42%);
 	}
 	.workspace-file-tools {
 		display: flex;
@@ -772,19 +776,34 @@
 		min-width: 0;
 	}
 	.workspace-file-search {
-		display: flex;
-		align-items: center;
-		gap: 5px;
 		flex: 1;
 		min-width: 0;
 	}
-	.workspace-file-search-input {
-		flex: 1;
-		min-width: 0;
-	}
-	.workspace-file-search-input :deep(.ui-input) {
-		--ui-control-height: var(--workspace-control-height);
+	.workspace-file-search :deep(.ui-input) {
+		--ui-input-height: var(--workspace-control-height);
+		--ui-control-padding-inline: 3px;
+		--ui-control-gap: 5px;
+		--ui-control-radius: 6px;
 		--ui-input-font-size: 13px;
+		background: color-mix(in srgb, var(--ui-text) 3%, var(--ui-surface));
+	}
+	.workspace-file-search :deep(.ui-input:focus-within) {
+		background: var(--ui-surface);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-primary) 12%, transparent);
+	}
+	.workspace-file-search :deep(input::-webkit-search-cancel-button) {
+		appearance: none;
+	}
+	.workspace-file-search .workspace-file-search-action {
+		--ui-button-height: calc(var(--workspace-control-height) - 8px);
+		--ui-button-radius: 4px;
+		--ui-button-text: var(--ui-muted);
+	}
+	.workspace-file-search .workspace-file-search-submit {
+		--ui-button-text: var(--ui-primary);
+	}
+	.workspace-file-search .workspace-file-search-submit:disabled:not([aria-busy]) {
+		opacity: 1;
 	}
 	@container file-pane (max-width: 610px) {
 		.workspace-file-header,
@@ -804,169 +823,37 @@
 			display: none;
 		}
 	}
-	.workspace-file-viewport {
-		flex: 1 1 0;
-		min-height: 0;
-		overflow: clip;
-	}
-	.workspace-file-list {
-		box-sizing: border-box;
-		container: workspace-files / inline-size;
-		min-height: 0;
-		padding: 4px 6px 8px;
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-	}
-	.workspace-file-row {
-		display: grid;
-		grid-template-columns: 18px minmax(0, 1fr) auto;
-		align-items: center;
-		gap: 8px;
-		width: 100%;
-		min-height: 30px;
-		border: 0;
-		background: transparent;
-		color: var(--ui-text);
-		font: inherit;
-		font-size: 12.5px;
-		line-height: 18px;
-		text-align: start;
-		border-radius: 7px;
-		padding: 5px 8px;
-		cursor: pointer;
-		transition: background-color 120ms ease;
-	}
-	.workspace-file-row:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--ui-text) 5.5%, transparent);
-	}
-	.workspace-file-row.is-selected {
-		background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ui-primary) 22%, transparent);
-	}
-	.workspace-file-row.is-directory .workspace-file-name {
-		font-weight: 500;
-	}
-	.workspace-file-row.is-parent .workspace-file-name {
-		grid-column: 2;
-		color: var(--ui-muted);
-		font-weight: 520;
-		letter-spacing: 0.06em;
-	}
-	.workspace-file-row.is-cut {
-		opacity: 0.45;
-	}
-	.workspace-file-row:focus-visible {
-		outline: 2px solid var(--ui-primary);
-		outline-offset: -2px;
-	}
-	.workspace-file-name {
-		display: block;
-		min-width: 0;
-		line-height: 18px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.workspace-file-size {
-		color: var(--ui-muted);
-		font-size: 11px;
-		line-height: 18px;
-		font-variant-numeric: tabular-nums;
-		white-space: nowrap;
-		opacity: 0.85;
-	}
-	.workspace-files[data-files-only] {
-		--file-columns: 22px minmax(0, 1fr) 76px 144px;
-	}
 	[data-files-only] .workspace-file-header {
 		padding: 11px 14px;
 		border-bottom: 0;
 		background: var(--ui-surface);
 	}
-	[data-files-only] .workspace-file-viewport {
-		display: flex;
-		flex-direction: column;
-		margin: 0 14px;
-		border: 1px solid var(--ui-border);
-		border-radius: 10px;
-	}
-	[data-files-only] .workspace-file-columns,
-	[data-files-only] .workspace-file-row {
-		display: grid;
-		grid-template-columns: var(--file-columns);
-		align-items: center;
-		gap: 8px;
-		padding-inline: 12px;
-	}
-	.workspace-file-columns {
-		flex: none;
-		min-block-size: 32px;
-		border-bottom: 1px solid var(--ui-border);
-		background: color-mix(in srgb, var(--ui-text) 4%, var(--ui-surface));
-		color: var(--ui-muted);
-		font-size: 11px;
-		font-weight: 600;
-		overflow: hidden;
-		scrollbar-gutter: stable;
-	}
-	.workspace-file-columns > :first-child {
-		grid-column: 2;
-	}
-	[data-files-only] .workspace-file-list {
-		flex: 1 1 auto;
-		min-height: 0;
-		gap: 0;
-		padding: 0;
-		scrollbar-gutter: stable;
-	}
-	[data-files-only] .workspace-file-row {
-		flex: none;
-		min-block-size: 37px;
-		border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
-		border-radius: 0;
-	}
-	[data-files-only] .workspace-file-size {
-		display: block;
-		text-align: end;
-	}
-	.workspace-file-row .workspace-file-modified {
-		color: var(--ui-muted);
-		font-size: 11px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
 	.workspace-file-status {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		flex: none;
-		min-block-size: 30px;
-		padding: 6px 15px;
+		gap: 10px;
+		min-block-size: 36px;
+		padding: 4px 15px;
 		color: var(--ui-muted);
 		font-size: 11px;
+	}
+	.workspace-file-status-search {
+		--workspace-control-height: 28px;
+
+		display: flex;
+		flex: 0 1 320px;
+		justify-content: flex-end;
+		min-width: 0;
+	}
+	.workspace-file-status-search .workspace-file-search-trigger {
+		--ui-button-height: var(--workspace-control-height);
+		--ui-button-text: var(--ui-muted);
 	}
 	@container file-pane (max-width: 610px) {
 		[data-files-only] .workspace-file-header {
 			padding: 10px;
-		}
-		[data-files-only] .workspace-file-viewport {
-			margin-inline: 10px;
-		}
-	}
-	@container file-pane (max-width: 500px) {
-		[data-files-only] .workspace-file-columns,
-		[data-files-only] .workspace-file-row {
-			grid-template-columns: 22px minmax(0, 1fr) 60px;
-		}
-		.workspace-file-modified {
-			display: none;
-		}
-	}
-	@container workspace-files (max-width: 300px) {
-		.workspace-file-row {
-			grid-template-columns: 18px minmax(0, 1fr);
-		}
-		.workspace-file-size {
-			display: none;
 		}
 	}
 	.workspace-file-drop {

@@ -5,3 +5,4 @@ dist/
 coverage/
 
 !vendor/nexus-terminal-*.tgz
+!vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02-audio-3bf4a223f776.tgz

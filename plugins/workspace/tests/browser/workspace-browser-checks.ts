@@ -77,7 +77,9 @@ export async function verifyWorkspaceAppearance(page: Page, workspace: Locator, 
 	await colors.locator('input[type=file]').setInputFiles({
 		name: 'Browser audit.json',
 		mimeType: 'application/json',
-		buffer: Buffer.from(JSON.stringify({ background: '#102030', foreground: '#eef4ff' })),
+		buffer: Buffer.from(
+			JSON.stringify({ name: 'Browser audit', colors: { background: '#102030', foreground: '#eef4ff' } }),
+		),
 	});
 	const custom = colors.locator('.workspace-theme-card').filter({ hasText: 'Browser audit' });
 	await custom.getByRole('button', { name: 'Apply theme · Browser audit', exact: true }).click();
@@ -415,6 +417,9 @@ export async function verifyWorkspacePanels(page: Page, workspace: Locator, host
 	const list = files.locator('.workspace-file-list');
 	const folder = files.getByRole('button', { name: 'prefetch-fixture', exact: true });
 	const prefetchedFile = files.getByRole('button', { name: 'prefetched.txt', exact: true });
+	await page.mouse.move(0, 0);
+	await files.getByRole('button', { name: 'Refresh directory', exact: true }).click();
+	await expect(list).toHaveAttribute('aria-busy', 'false');
 	await expect(entry.locator('[data-file-icon="document"] svg')).toBeVisible();
 	await expect(folder.locator('[data-file-icon="folder"] svg')).toBeVisible();
 	await expect(files.locator('.workspace-file-icon img')).toHaveCount(0);
@@ -798,7 +803,8 @@ export async function verifyFileMutations(page: Page, workspace: Locator, direct
 	const list = files.locator('.workspace-file-list');
 	await expect(entry('file.txt')).toBeVisible();
 	await files.getByRole('button', { name: 'Search this folder and subfolders', exact: true }).click();
-	const query = files.getByRole('textbox', { name: 'Search this folder and subfolders', exact: true });
+	const query = files.getByRole('searchbox', { name: 'Search this folder and subfolders', exact: true });
+	await expect(query).toBeFocused();
 	await query.fill('file.txt');
 	await expect(entry('file.txt')).toBeVisible();
 	await expect(list).toHaveAttribute('aria-busy', 'false');
@@ -843,6 +849,9 @@ export async function verifyFileMutations(page: Page, workspace: Locator, direct
 		await page.unroute(searchRequests);
 	}
 	await expect(list.getByText('No matching files', { exact: true })).toBeVisible();
+	await files.getByRole('button', { name: 'Clear search', exact: true }).click();
+	await expect(query).toHaveValue('');
+	await expect(query).toBeFocused();
 	await files.getByRole('button', { name: 'Close search', exact: true }).click();
 	await expect(entry('file.txt')).toBeVisible();
 	await list.focus();
@@ -990,12 +999,13 @@ export async function verifyFileMutations(page: Page, workspace: Locator, direct
 	await entry('qa-second.txt').click({ modifiers: ['Shift'] });
 	await expect(files.locator('.workspace-file-row[aria-pressed="true"]')).toHaveCount(2);
 	await files.getByRole('button', { name: 'Search this folder and subfolders', exact: true }).click();
-	const search = files.getByRole('textbox', { name: 'Search this folder and subfolders', exact: true });
+	const search = files.getByRole('searchbox', { name: 'Search this folder and subfolders', exact: true });
 	await search.fill('qa-upload');
 	await search.press('Enter');
 	await expect(entry('qa-upload.txt')).toBeVisible();
 	await expect(entry('qa-second.txt')).toHaveCount(0);
-	await files.getByRole('button', { name: 'Close search', exact: true }).click();
+	await search.press('Escape');
+	await expect(files.getByRole('button', { name: 'Search this folder and subfolders', exact: true })).toBeFocused();
 	await expect(entry('qa-second.txt')).toBeVisible();
 }
 

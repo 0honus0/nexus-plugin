@@ -4,6 +4,7 @@ import {
 	WorkspaceCatalogSchema,
 	type WorkspaceCatalog,
 	WorkspacePreferencesSchema,
+	createDefaultWorkspacePreferences,
 	type CatalogResource,
 } from '../../shared/workspace-catalog-types';
 import { createWorkspaceClient } from '../workspace-client';
@@ -20,7 +21,7 @@ function createCatalogDocument(ctx: PluginContextApi) {
 			favorites: [],
 			commands: [],
 			themes: [],
-			preferences: { ...WorkspacePreferencesSchema.parse({ theme: null }), version: 0 },
+			preferences: { ...createDefaultWorkspacePreferences(), version: 0 },
 		},
 		{
 			read: () => request('catalog', undefined, undefined, WorkspaceCatalogSchema),

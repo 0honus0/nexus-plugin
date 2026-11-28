@@ -345,12 +345,11 @@
 		border-radius: 4px;
 		background: var(--ui-border);
 	}
-	.workspace-transfer-center > .ui-dialog__header {
-		align-items: center;
-		padding: 17px 20px 9px;
+	.workspace-transfer-center > .ui-dialog__surface > .ui-dialog__header {
+		padding: 12px 20px;
 	}
-	.workspace-transfer-center[data-narrow='true'] > .ui-dialog__header {
-		padding-top: 23px;
+	.workspace-transfer-center[data-narrow='true'] > .ui-dialog__surface > .ui-dialog__header {
+		padding-block-start: 25px;
 	}
 	.workspace-transfer-center .ui-dialog__title {
 		display: flex;
@@ -379,7 +378,7 @@
 	}
 	.workspace-transfer-tabs {
 		flex: 0 0 auto;
-		margin: 0 20px 8px;
+		margin: 12px 20px 8px;
 	}
 	.workspace-transfer-list {
 		flex: 1;

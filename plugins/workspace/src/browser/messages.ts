@@ -53,6 +53,7 @@ export const messages = {
 		moveRegion: '移动{name}区域',
 		homeDirectory: '主目录',
 		searchFiles: '搜索当前目录及子目录',
+		clearSearch: '清除搜索',
 		closeSearch: '关闭搜索',
 		searchTruncated: '部分目录无法读取或已达到搜索上限，请缩小搜索范围。',
 		openDirectory: '打开目录',
@@ -76,7 +77,7 @@ export const messages = {
 		connectionsUnavailable: '连接服务未就绪，请在插件市场检查依赖。',
 		connectionsReadFailed: '无法读取连接列表。',
 		retryConnections: '重试',
-		unsupportedConnection: '暂不支持此类型连接',
+		unsupportedConnection: '需要远程桌面插件',
 		connectionTypes: { ssh: 'SSH', rdp: 'RDP', vnc: 'VNC' },
 		fileActions: '管理 {name}',
 		general: {
@@ -289,6 +290,7 @@ export const messages = {
 		moveRegion: 'Move {name} region',
 		homeDirectory: 'Home directory',
 		searchFiles: 'Search this folder and subfolders',
+		clearSearch: 'Clear search',
 		closeSearch: 'Close search',
 		searchTruncated: 'Some folders were inaccessible or the search limit was reached. Narrow your search.',
 		openDirectory: 'Open folder',
@@ -312,7 +314,7 @@ export const messages = {
 		connectionsUnavailable: 'Connection service is not ready. Check dependencies in the marketplace.',
 		connectionsReadFailed: 'Could not load connections.',
 		retryConnections: 'Retry',
-		unsupportedConnection: 'Connection type not yet supported',
+		unsupportedConnection: 'Remote Desktop required',
 		connectionTypes: { ssh: 'SSH', rdp: 'RDP', vnc: 'VNC' },
 		fileActions: 'Manage {name}',
 		general: {

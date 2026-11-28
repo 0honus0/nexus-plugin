@@ -10,6 +10,7 @@
 		connections: Connection[];
 		suspended: SessionInfo[];
 		connectionsAvailable: boolean;
+		desktopAvailable: boolean;
 		connectionsLoaded: boolean;
 		connectionsReadFailed: boolean;
 		connecting: boolean;
@@ -65,9 +66,8 @@
 <template>
 	<div class="workspace-home">
 		<header class="workspace-home-heading">
-			<div>
+			<div class="workspace-home-heading__text">
 				<h2>{{ t(filesOnly ? 'fileManagerChoose' : 'subtitle') }}</h2>
-				<p v-if="connections.length">{{ t(filesOnly ? 'fileManagerDescription' : 'description') }}</p>
 			</div>
 			<div v-if="connections.length" class="workspace-home-actions">
 				<UiButton tone="primary" appearance="solid" :disabled="!connectionsAvailable" @click="emit('create')">
@@ -75,14 +75,6 @@
 				</UiButton>
 			</div>
 		</header>
-		<div v-if="connections.length" class="workspace-home-filters">
-			<div class="workspace-home-search">
-				<UiInput v-model="search" :placeholder="t('searchConnections')" :aria-label="t('searchConnections')"
-					><template #leading><Search :size="16" /></template
-				></UiInput>
-			</div>
-			<UiSelect v-if="!filesOnly" v-model="type" :options="typeOptions" :aria-label="t('filterType')" />
-		</div>
 		<section v-if="suspended.length" class="workspace-suspended">
 			<h3>
 				<Play :size="16" />{{ t('sessions') }}<span>{{ suspended.length }}</span>
@@ -117,6 +109,14 @@
 			class="workspace-home-groups"
 			:aria-busy="connectionsAvailable && !connectionsLoaded && !connectionsReadFailed"
 		>
+			<div v-if="connections.length" class="workspace-home-filters">
+				<div class="workspace-home-search">
+					<UiInput v-model="search" :placeholder="t('searchConnections')" :aria-label="t('searchConnections')"
+						><template #leading><Search :size="16" /></template
+					></UiInput>
+				</div>
+				<UiSelect v-if="!filesOnly" v-model="type" :options="typeOptions" :aria-label="t('filterType')" />
+			</div>
 			<div v-if="!connectionsLoaded" class="workspace-home-empty">
 				<p v-if="!connectionsAvailable" role="status">{{ t('connectionsUnavailable') }}</p>
 				<template v-else-if="connectionsReadFailed">
@@ -138,11 +138,12 @@
 							v-for="connection in group.items"
 							:key="connection.id"
 							class="workspace-connection-card"
+							:data-protocol="connection.type"
 							:title="connection.name"
 							:description="address(connection)"
 							:icon="icons[connection.type]"
 							:action-label="connection.name"
-							:disabled="connection.type !== 'ssh' || connecting"
+							:disabled="connection.type === 'ssh' ? connecting : !desktopAvailable"
 							:aria-busy="connecting && selected === connection.id"
 							@select="emit('connect', connection.id)"
 						>
@@ -155,15 +156,23 @@
 									:is="icons[connection.type]"
 									:size="23"
 							/></template>
-							<template #tags
-								><span class="workspace-protocol">{{ t('connectionTypes.' + connection.type) }}</span
-								><span v-if="connection.type !== 'ssh'" class="workspace-connection-hint">{{
-									t('unsupportedConnection')
-								}}</span
-								><span v-else-if="!connection.credentialId" class="workspace-connection-hint">{{
-									t('noCredential')
-								}}</span></template
+							<template
+								v-if="
+									(connection.type !== 'ssh' && !desktopAvailable) ||
+									(connection.type !== 'vnc' && !connection.credentialId)
+								"
+								#tags
 							>
+								<span
+									v-if="connection.type !== 'ssh' && !desktopAvailable"
+									class="workspace-connection-hint"
+									>{{ t('unsupportedConnection') }}</span
+								>
+								<span v-else class="workspace-connection-hint">{{ t('noCredential') }}</span>
+							</template>
+							<template #title-end>
+								<span class="workspace-protocol">{{ t('connectionTypes.' + connection.type) }}</span>
+							</template>
 						</UiCard>
 					</div></CollapsibleContent
 				>

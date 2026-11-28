@@ -1,0 +1,170 @@
+diff --git a/dist/cjs/guacamole-common.js b/dist/cjs/guacamole-common.js
+index 583f4f5c6e36b8b2f8d28fda63d3a5b8a6529d4a..b72540daba8ada98e078152a99f6626e935ee578 100644
+--- a/dist/cjs/guacamole-common.js
++++ b/dist/cjs/guacamole-common.js
+@@ -4423,7 +4423,7 @@ Guacamole.Display = function() {
+      * @param {boolean} [blocked]
+      *     Whether this task should start blocked.
+      */
+-    function Task(taskHandler, blocked) {
++    function Task(taskHandler, blocked, onCancel) {
+
+         /**
+          * Reference to this Task.
+@@ -4448,6 +4448,10 @@ Guacamole.Display = function() {
+         this.cancel = function cancel() {
+             task.blocked = false;
+             taskHandler = null;
++            if (onCancel) {
++                onCancel();
++                onCancel = null;
++            }
+         };
+
+         /**
+@@ -4490,8 +4494,8 @@ Guacamole.Display = function() {
+      * @returns {!Task}
+      *     The Task created and added to the queue for future running.
+      */
+-    function scheduleTask(handler, blocked) {
+-        var task = new Task(handler, blocked);
++    function scheduleTask(handler, blocked, onCancel) {
++        var task = new Task(handler, blocked, onCancel);
+         tasks.push(task);
+         return task;
+     }
+@@ -4895,15 +4899,45 @@ Guacamole.Display = function() {
+             });
+
+             var decodedFrame = null;
++            var cancelled = false;
++            var decoderClosed = false;
+
+-            // Draw image once loaded
+-            var task = scheduleTask(function drawImageBitmap() {
+-                layer.drawImage(x, y, decodedFrame);
+-            }, true);
++            function closeDecoder() {
++                if (decoderClosed) return;
++                decoderClosed = true;
++                imageDecoder.close();
++            }
++
++            // Rendering and cancellation both release the WebCodecs frame.
++            var task = scheduleTask(function drawDecodedImage() {
++                if (!decodedFrame) return;
++                try {
++                    layer.drawImage(x, y, decodedFrame);
++                }
++                finally {
++                    decodedFrame.close();
++                    decodedFrame = null;
++                }
++            }, true, function cancelDecode() {
++                cancelled = true;
++                closeDecoder();
++                if (decodedFrame) {
++                    decodedFrame.close();
++                    decodedFrame = null;
++                }
++            });
+
+             imageDecoder.decode({ completeFramesOnly: true }).then(function bitmapLoaded(result) {
++                closeDecoder();
++                if (cancelled) {
++                    result.image.close();
++                    return;
++                }
+                 decodedFrame = result.image;
+                 task.unblock();
++            }, function decodeFailed() {
++                closeDecoder();
++                if (!cancelled) task.unblock();
+             });
+
+         }
+diff --git a/dist/esm/guacamole-common.js b/dist/esm/guacamole-common.js
+index 9147927c4a02f1ad24aeeafb7960e679d0bfeb91..8071983745015a6ebf5683a0b4a8730bace6307c 100644
+--- a/dist/esm/guacamole-common.js
++++ b/dist/esm/guacamole-common.js
+@@ -4423,7 +4423,7 @@ Guacamole.Display = function() {
+      * @param {boolean} [blocked]
+      *     Whether this task should start blocked.
+      */
+-    function Task(taskHandler, blocked) {
++    function Task(taskHandler, blocked, onCancel) {
+
+         /**
+          * Reference to this Task.
+@@ -4448,6 +4448,10 @@ Guacamole.Display = function() {
+         this.cancel = function cancel() {
+             task.blocked = false;
+             taskHandler = null;
++            if (onCancel) {
++                onCancel();
++                onCancel = null;
++            }
+         };
+
+         /**
+@@ -4490,8 +4494,8 @@ Guacamole.Display = function() {
+      * @returns {!Task}
+      *     The Task created and added to the queue for future running.
+      */
+-    function scheduleTask(handler, blocked) {
+-        var task = new Task(handler, blocked);
++    function scheduleTask(handler, blocked, onCancel) {
++        var task = new Task(handler, blocked, onCancel);
+         tasks.push(task);
+         return task;
+     }
+@@ -4895,15 +4899,45 @@ Guacamole.Display = function() {
+             });
+
+             var decodedFrame = null;
++            var cancelled = false;
++            var decoderClosed = false;
+
+-            // Draw image once loaded
+-            var task = scheduleTask(function drawImageBitmap() {
+-                layer.drawImage(x, y, decodedFrame);
+-            }, true);
++            function closeDecoder() {
++                if (decoderClosed) return;
++                decoderClosed = true;
++                imageDecoder.close();
++            }
++
++            // Rendering and cancellation both release the WebCodecs frame.
++            var task = scheduleTask(function drawDecodedImage() {
++                if (!decodedFrame) return;
++                try {
++                    layer.drawImage(x, y, decodedFrame);
++                }
++                finally {
++                    decodedFrame.close();
++                    decodedFrame = null;
++                }
++            }, true, function cancelDecode() {
++                cancelled = true;
++                closeDecoder();
++                if (decodedFrame) {
++                    decodedFrame.close();
++                    decodedFrame = null;
++                }
++            });
+
+             imageDecoder.decode({ completeFramesOnly: true }).then(function bitmapLoaded(result) {
++                closeDecoder();
++                if (cancelled) {
++                    result.image.close();
++                    return;
++                }
+                 decodedFrame = result.image;
+                 task.unblock();
++            }, function decodeFailed() {
++                closeDecoder();
++                if (!cancelled) task.unblock();
+             });
+
+         }

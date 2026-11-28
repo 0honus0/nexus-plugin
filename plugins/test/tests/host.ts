@@ -89,7 +89,7 @@ export async function startHost(
 	resources: AsyncDisposableStack,
 	target = plugin.name,
 	fixtures: readonly Fixture[] = [{ directory: root }, { directory: join(root, 'tests/fixtures/provider') }],
-	options?: { certificateAuthority?: string },
+	options?: { certificateAuthority?: string; network?: string; guacamoleHost?: string },
 ) {
 	const fixtureToken = randomUUID();
 	const working = await mkdtemp(join(tmpdir(), 'nexus-external-sdk-'));
@@ -155,6 +155,8 @@ export async function startHost(
 			'sdk-repository.test:host-gateway',
 			'--env',
 			'NEXUS_SDK_FIXTURE_TOKEN',
+			...(options?.network ? ['--network', options.network] : []),
+			...(options?.guacamoleHost ? ['--env', `NEXUS_GUACD_HOST=${options.guacamoleHost}`] : []),
 			...(options?.certificateAuthority
 				? [
 						'--mount',

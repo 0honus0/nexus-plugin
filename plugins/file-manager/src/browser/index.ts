@@ -1,9 +1,10 @@
 import type { FileManagerFile, FileManagerOpenFile } from '@nexus-terminal/workspace/file-manager-api';
-import { FileSearch, FolderOpen } from '@lucide/vue';
+import { FolderOpen } from '@lucide/vue';
 import { defineComponent, h, onScopeDispose, shallowRef, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { PluginModuleApi, PluginWindowApi, PluginWindowProps } from 'nexus-terminal/browser';
 import FilePreviewWindow from './FilePreviewWindow.vue';
+import FileList from '#file-list';
 import { language, messages } from './messages.js';
 import { previewFormat } from './preview-formats.js';
 import { createDocument, type PreviewDocument } from './preview-document.js';
@@ -40,7 +41,7 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 		const batch = [document];
 		pending.push(batch);
 		try {
-			context.app.windows.open('preview');
+			context.app.windows.open('main');
 		} catch (cause) {
 			const index = pending.indexOf(batch);
 			if (index !== -1) pending.splice(index, 1);
@@ -51,20 +52,31 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 
 	const fileManagerView = shallowRef<Component>();
 	context.use({ workspace: ['@nexus-terminal/workspace', 'fileManager'] }, ({ plugin, onDispose }) => {
-		const unregister = plugin.workspace.registerFileOpener(openFile);
+		const presentation = { list: FileList, open: openFile };
+		const unregister = plugin.workspace.registerFilePresentation(presentation);
 		onDispose(unregister);
-		const component = plugin.workspace.createView(openFile);
+		const component = plugin.workspace.createView(presentation);
 		fileManagerView.value = component;
 		onDispose(() => {
 			if (fileManagerView.value === component) fileManagerView.value = undefined;
 		});
 	});
 
-	const preview = defineComponent({
+	const component = defineComponent({
 		props: ['context', 'view'],
 
-		setup({ view }: PluginWindowProps) {
-			const tabs = shallowRef(pending.shift() ?? []);
+		setup(props: PluginWindowProps) {
+			const { view } = props;
+			const documents = pending.shift();
+			if (!documents) {
+				const { locale } = useI18n({ useScope: 'global' });
+				return () =>
+					fileManagerView.value
+						? h(fileManagerView.value, props)
+						: h('p', { role: 'status' }, messages[language(locale.value)].loading);
+			}
+
+			const tabs = shallowRef(documents);
 			const active = shallowRef(tabs.value.at(-1)?.id);
 			previews.set(view, (document) => {
 				if (!tabs.value.some((tab) => tab.id === document.id)) tabs.value = [...tabs.value, document];
@@ -95,17 +107,6 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 		},
 	});
 
-	const component = defineComponent({
-		props: ['context', 'view'],
-
-		setup(props: PluginWindowProps) {
-			const { locale } = useI18n({ useScope: 'global' });
-			return () =>
-				fileManagerView.value
-					? h(fileManagerView.value, props)
-					: h('p', { role: 'status' }, messages[language(locale.value)].loading);
-		},
-	});
 	context.contribute({
 		applications: [
 			{
@@ -115,19 +116,9 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 
 				icon: FolderOpen,
 				component,
-				scrollMode: 'content',
-				defaultWindowSize: { width: 920, height: 600 },
-			},
-			{
-				id: 'preview',
-
-				label: (locale) => messages[language(locale)].preview,
-
-				icon: FileSearch,
-				component: preview,
 				multipleWindows: true,
 				scrollMode: 'content',
-				defaultWindowSize: { width: 820, height: 620 },
+				defaultWindowSize: { width: 920, height: 600 },
 			},
 		],
 	});

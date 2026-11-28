@@ -13,9 +13,14 @@ export interface FileManagerFile {
 
 export type FileManagerOpenFile = (file: FileManagerFile) => boolean;
 
+export interface FileManagerPresentation {
+	readonly list: Component;
+	open: FileManagerOpenFile;
+}
+
 export interface WorkspaceFileManagerApi {
-	createView(openFile: FileManagerOpenFile): Component;
-	registerFileOpener(openFile: FileManagerOpenFile): () => void;
+	createView(presentation: FileManagerPresentation): Component;
+	registerFilePresentation(presentation: FileManagerPresentation): () => void;
 }
 
 declare module 'nexus-terminal/browser' {

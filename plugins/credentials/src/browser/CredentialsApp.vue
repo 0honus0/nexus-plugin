@@ -1,15 +1,8 @@
 <script setup lang="ts">
+	import '../../../../shared/browser/catalog.css';
 	import { ref, computed, onMounted } from 'vue';
-	import { Ellipsis, KeyRound, LockKeyhole, Pencil, Plus, Search, Trash2, RefreshCw } from '@lucide/vue';
-	import {
-		UiInput,
-		UiButton,
-		UiCard,
-		UiEmptyState,
-		UiDialog,
-		UiDropdownMenu,
-		UiSelect,
-	} from 'nexus-terminal/browser/ui';
+	import { KeyRound, LockKeyhole, Plus, Search, Trash2, RefreshCw } from '@lucide/vue';
+	import { UiInput, UiButton, UiCard, UiEmptyState, UiDialog, UiSelect } from 'nexus-terminal/browser/ui';
 	import type { PluginWindowProps } from 'nexus-terminal/browser';
 	import { useI18n } from 'vue-i18n';
 	import { messages } from './messages.js';
@@ -17,7 +10,7 @@
 	import type { Credential } from '../shared/credentials-types';
 	import CredentialEditor from './CredentialEditor.vue';
 	const props = defineProps<PluginWindowProps & { runtime: CredentialsClient }>();
-	const { t } = useI18n({ useScope: 'local', messages });
+	const { t, n } = useI18n({ useScope: 'local', messages });
 	const { items, loaded, pending: requests } = props.runtime;
 	const loading = computed(() => requests.value > 0);
 
@@ -35,16 +28,6 @@
 		{ value: 'password', label: t('passwordType') },
 		{ value: 'privateKey', label: t('privateKeyType') },
 	]);
-	const actions = computed(() => [
-		{ id: 'edit', label: t('edit'), icon: Pencil },
-		{ id: 'delete', label: t('delete'), icon: Trash2, tone: 'danger' as const },
-	]);
-
-	function selectAction(action: string, item: Credential) {
-		if (action === 'edit') editor.value = { credential: item };
-		else if (action === 'delete') pending.value = item;
-	}
-
 	const entries = computed(() =>
 		items.value.filter(
 			(v) =>
@@ -74,10 +57,21 @@
 	}
 </script>
 <template>
-	<section class="credentials-app" data-ui-selection="none">
-		<header v-if="!loaded || items.length" class="credentials-toolbar">
-			<div class="credentials-toolbar-filters">
-				<div class="credentials-search">
+	<section class="credentials-app plugin-catalog" data-ui-selection="none">
+		<header class="plugin-catalog__header">
+			<div class="plugin-catalog__identity">
+				<h2>{{ t('catalogTitle') }}</h2>
+				<span
+					v-if="loaded"
+					class="plugin-catalog__count"
+					:aria-label="t('catalogCount', { shown: entries.length, total: items.length })"
+				>
+					{{ n(entries.length)
+					}}<template v-if="entries.length !== items.length"> / {{ n(items.length) }}</template>
+				</span>
+			</div>
+			<div v-if="!loaded || items.length" class="plugin-catalog__tools">
+				<div class="plugin-catalog__search">
 					<UiInput v-model="search" :placeholder="t('searchShort')" :aria-label="t('search')"
 						><template #leading><Search :size="16" /></template
 					></UiInput>
@@ -89,12 +83,12 @@
 					:aria-label="t('type')"
 				/>
 			</div>
-			<div class="credentials-toolbar-actions">
+			<div v-if="!loaded || items.length" class="plugin-catalog__actions">
 				<UiButton tone="primary" appearance="solid" @click="editor = {}"
 					><template #leading><Plus :size="15" /></template>{{ t('add') }}</UiButton
 				>
 				<UiButton
-					appearance="ghost"
+					appearance="soft"
 					icon-only
 					:loading="loading"
 					loading-animation="icon"
@@ -104,31 +98,40 @@
 				/></UiButton>
 			</div>
 		</header>
-		<div class="credentials-list" :data-first="(loaded && !items.length) || undefined" :aria-busy="loading">
+		<div
+			class="credentials-list plugin-catalog__list"
+			:data-first="(loaded && !items.length) || undefined"
+			:aria-busy="loading"
+		>
 			<UiCard
 				v-for="item in entries"
 				:key="item.id"
-				class="credentials-card"
+				class="credentials-card plugin-catalog__card"
 				:data-type="item.type"
 				:title="item.name"
 				:description="item.username"
+				:action-label="t('edit') + ' · ' + item.name"
 				:icon="item.type === 'password' ? LockKeyhole : KeyRound"
 				tone="primary"
 				@select="editor = { credential: item }"
 			>
-				<template #badge>
+				<template #title-end>
 					<span class="credentials-type" :data-type="item.type">{{ t(item.type + 'Type') }}</span>
 				</template>
 				<template #actions>
-					<UiDropdownMenu :items="actions" @select="selectAction($event, item)">
-						<UiButton appearance="ghost" icon-only :aria-label="t('actions') + ' · ' + item.name"
-							><Ellipsis :size="18"
-						/></UiButton>
-					</UiDropdownMenu>
+					<UiButton
+						appearance="ghost"
+						tone="danger"
+						icon-only
+						:title="t('delete')"
+						:aria-label="t('delete') + ' · ' + item.name"
+						@click="pending = item"
+						><Trash2 :size="16"
+					/></UiButton>
 				</template>
 			</UiCard>
 			<UiEmptyState
-				class="credentials-empty"
+				class="credentials-empty plugin-catalog__empty"
 				v-if="loaded && !entries.length"
 				:icon="items.length ? Search : KeyRound"
 				:title="t(items.length ? 'noResults' : 'empty')"

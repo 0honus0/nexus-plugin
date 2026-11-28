@@ -102,11 +102,14 @@ test(
 		]) {
 			const card = app.locator('.credentials-card').filter({ hasText: name });
 			const label = card.getByText(type, { exact: true });
-			const menu = card.getByRole('button', { name: 'Manage credential · ' + name });
+			const edit = card.getByRole('button', { name: 'Edit credential · ' + name, exact: true });
 			await expect(label).toHaveCount(1);
-			const bounds = (await label.boundingBox())!;
-			const action = (await menu.boundingBox())!;
-			expect(action.y + action.height / 2).toBeCloseTo(bounds.y + bounds.height / 2, 0);
+			await expect(card.getByRole('button', { name: 'Delete · ' + name, exact: true })).toBeVisible();
+			await expect(card.locator('.ui-card__description')).toBeVisible();
+			await edit.click();
+			const editor = page.getByRole('dialog', { name: 'Edit credential', exact: true });
+			await expect(editor.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue(name);
+			await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
 		}
 
 		await app.getByRole('button', { name: 'Add credential', exact: true }).click();
@@ -172,18 +175,13 @@ test(
 		await dialog.getByLabel('Key passphrase', { exact: true }).fill('fixture');
 		await dialog.getByRole('button', { name: 'Save', exact: true }).click();
 		await expect(app.getByText('Imported key fixture', { exact: true })).toBeVisible();
-		const menu = app.getByRole('button', { name: 'Manage credential · Imported key fixture', exact: true });
+		const remove = app.getByRole('button', { name: 'Delete · Imported key fixture', exact: true });
 
-		const remove = async () => {
-			await menu.click();
-			await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
-		};
-
-		await remove();
+		await remove.click();
 		const confirmation = page.getByRole('dialog', { name: 'Delete credential', exact: true });
 		await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
 		await expect(app.getByText('Imported key fixture', { exact: true })).toBeVisible();
-		await remove();
+		await remove.click();
 		await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
 		await expect(app.getByText('Imported key fixture', { exact: true })).toHaveCount(0);
 

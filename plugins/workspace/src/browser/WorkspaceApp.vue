@@ -76,6 +76,7 @@
 		credentials,
 		canCreateConnection,
 		connectionsLoaded,
+		desktopAvailable,
 		connectionsReadFailed,
 		retryConnections,
 		savedConnections,
@@ -109,6 +110,18 @@
 	const homeConnections = computed(() =>
 		props.filesOnly ? savedConnections.value.filter((item) => item.type === 'ssh') : savedConnections.value,
 	);
+
+	function openConnection(id: string): void {
+		if (homeConnections.value.find((item) => item.id === id)?.type === 'ssh') {
+			start(id);
+			return;
+		}
+		try {
+			connections.value?.openDesktop(id);
+		} catch (cause) {
+			report(cause);
+		}
+	}
 
 	function openCreate(): void {
 		if (canCreateConnection.value) createOpen.value = true;
@@ -226,12 +239,13 @@
 			:files-only="filesOnly"
 			:suspended="filesOnly ? [] : suspended"
 			:connections-available="!!connections"
+			:desktop-available="desktopAvailable"
 			:connections-loaded="connectionsLoaded"
 			:connections-read-failed="connectionsReadFailed"
 			:selected="selected"
 			:connecting="connecting"
 			:i18n="i18n"
-			@connect="start"
+			@connect="openConnection"
 			@resume="add"
 			@close="requestCloseSuspended"
 			@create="openCreate"

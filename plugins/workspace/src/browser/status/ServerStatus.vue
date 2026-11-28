@@ -158,6 +158,13 @@
 			: `${metric.name} ${metric.displayPercent}`;
 	};
 
+	const metricColors = {
+		cpu: 'var(--ui-app-blue)',
+		memory: 'var(--ui-success)',
+		swap: 'var(--ui-app-violet)',
+		disk: 'var(--ui-warning)',
+		network: 'var(--ui-app-cyan)',
+	} as const;
 	const metrics = computed<
 		Array<{
 			key: ResourceMetric;
@@ -193,7 +200,7 @@
 					firstLoadAverage !== undefined && Number.isFinite(firstLoadAverage)
 						? firstLoadAverage.toFixed(2)
 						: undefined,
-				color: '#3b82f6',
+				color: metricColors.cpu,
 				icon: CpuIcon,
 			},
 			{
@@ -203,7 +210,7 @@
 				displayPercent: percent(status?.memPercent),
 				detail: memory(status?.memUsed, status?.memTotal),
 				capacity: capacityParts(memory(status?.memUsed, status?.memTotal)),
-				color: '#10b981',
+				color: metricColors.memory,
 				icon: MemoryIcon,
 			},
 			{
@@ -213,7 +220,7 @@
 				displayPercent: percent(status?.swapPercent),
 				detail: swap(status?.swapUsed, status?.swapTotal),
 				capacity: capacityParts(swap(status?.swapUsed, status?.swapTotal)),
-				color: '#8b5cf6',
+				color: metricColors.swap,
 				icon: SwapIcon,
 			},
 			{
@@ -223,19 +230,12 @@
 				displayPercent: percent(status?.diskPercent),
 				detail: disk(status?.diskUsed, status?.diskTotal),
 				capacity: capacityParts(disk(status?.diskUsed, status?.diskTotal)),
-				color: '#f59e0b',
+				color: metricColors.disk,
 				icon: DiskIcon,
 			},
 		];
 	});
 
-	const metricColors = {
-		cpu: '#3b82f6',
-		memory: '#10b981',
-		swap: '#8b5cf6',
-		disk: '#f59e0b',
-		network: '#14b8a6',
-	} as const;
 	const selectedMetricColor = computed(() => metricColors[selectedMetric.value ?? 'cpu']);
 	const metricKeys = {
 		cpu: 'cpuPercent',

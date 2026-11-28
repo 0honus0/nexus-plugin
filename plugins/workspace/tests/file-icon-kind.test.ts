@@ -3,6 +3,7 @@ import { fileIconKind } from '../src/browser/files/file-icon-kind';
 
 it('uses directory and link types before extensions and supports the parent row', () => {
 	expect(fileIconKind('photo.png', 'directory')).toBe('folder');
+	expect(fileIconKind('..', 'directory')).toBe('parent');
 	expect(fileIconKind('photo.png', 'link')).toBe('link');
 	expect(fileIconKind('photo.png', 'other')).toBe('file');
 });

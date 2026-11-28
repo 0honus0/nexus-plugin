@@ -37,27 +37,24 @@ it('retains every legacy palette with unique stable ids and valid colors', () =>
 	}
 });
 
-it('imports legacy plain palettes using the filename and retains current named exports', () => {
+it('imports named theme files individually or as a collection', () => {
 	const colors = { background: '#102030', foreground: '#fefefe', selectionBackground: '#33445566' };
-	expect(readTerminalThemeFile(JSON.stringify(colors), 'Legacy.JSON')).toEqual([{ name: 'Legacy', colors }]);
-	expect(readTerminalThemeFile(JSON.stringify({ name: 'Named', colors }), 'ignored.json')).toEqual([
-		{ name: 'Named', colors },
-	]);
-	expect(readTerminalThemeFile(JSON.stringify([colors, { name: 'Named', colors }]), 'Mixed.json')).toEqual([
-		{ name: 'Mixed', colors },
-		{ name: 'Named', colors },
-	]);
+	const theme = { name: 'Named', colors };
+	const collection = [theme, { name: 'Second', colors }];
+	expect(readTerminalThemeFile(JSON.stringify(theme))).toEqual([theme]);
+	expect(readTerminalThemeFile(JSON.stringify(collection))).toEqual(collection);
 });
 
 it('rejects invalid theme files in full before any entries can be saved', () => {
 	const valid = { name: 'Valid', colors: { background: '#102030', foreground: '#ffffff' } };
 	for (const input of [
 		[valid, { name: 'Invalid', colors: { background: '#000000' } }],
+		valid.colors,
 		{ background: '#000000', foreground: 'url(https://example.test)' },
 		{ ...valid.colors, unknown: '#000000' },
 		[],
 		Array.from({ length: 51 }, () => valid),
 	])
-		expect(() => readTerminalThemeFile(JSON.stringify(input), 'Invalid.json')).toThrow();
-	expect(() => readTerminalThemeFile('{', 'Invalid.json')).toThrow();
+		expect(() => readTerminalThemeFile(JSON.stringify(input))).toThrow();
+	expect(() => readTerminalThemeFile('{')).toThrow();
 });

@@ -108,8 +108,29 @@ test(
 
 		await page.locator('.dock-reveal').evaluate((button: HTMLElement) => button.click());
 		await page.getByRole('button', { name: 'Edit desktop' }).click();
-		await tile.locator('.desktop-tile__size').click();
+		const sizeButton = tile.locator('.desktop-tile__size');
+		await sizeButton.click();
 		const size = page.getByRole('dialog', { name: 'Tile size' });
+		await size.getByRole('button', { name: '2 × 1', exact: true }).click();
+		await size.getByRole('button', { name: 'Close application' }).click();
+		const wideCountOffsets: number[][] = [];
+		for (const width of [2, 3]) {
+			if (width === 3) await tile.getByRole('button', { name: 'Move Connections' }).press('Shift+ArrowRight');
+			await expect(sizeButton).toHaveText(width + ' × 1');
+			wideCountOffsets.push(
+				await tile.locator('.connections-tile').evaluate((element) => {
+					const bottom = element.getBoundingClientRect().bottom;
+					return [...element.querySelectorAll('.connections-tile__group > strong')].map((count) => {
+						const rect = count.getBoundingClientRect();
+						return Math.round(bottom - rect.top - rect.height / 2);
+					});
+				}),
+			);
+		}
+		expect(wideCountOffsets[0]).toHaveLength(3);
+		expect(wideCountOffsets[1]).toEqual(wideCountOffsets[0]);
+
+		await sizeButton.click();
 		await size.getByRole('button', { name: '1 × 1', exact: true }).click();
 		await size.getByRole('button', { name: 'Close application' }).click();
 		await page.locator('.dock-reveal').evaluate((button: HTMLElement) => button.click());
@@ -126,26 +147,21 @@ test(
 		for (const type of ['SSH', 'RDP', 'VNC']) {
 			const card = app.locator('.connections-card').filter({ hasText: type + ' fixture' });
 			await expect(card.getByText(type, { exact: true })).toHaveCount(1);
-			const menu = card.getByRole('button', { name: 'More actions · ' + type + ' fixture' });
-			await expect(menu).toBeVisible();
-			// Read both rectangles in the same browser frame while window motion is active.
-			const centers = await card.evaluate(
-				(element, label) => {
-					const action = Array.from(element.querySelectorAll('button')).find(
-						(button) => button.getAttribute('aria-label') === label,
-					);
-					if (!action) throw new Error('Missing connection action');
-					const bounds = element.querySelector('.connections-type')!.getBoundingClientRect();
-					const menuBounds = action.getBoundingClientRect();
-					return { badge: bounds.y + bounds.height / 2, menu: menuBounds.y + menuBounds.height / 2 };
-				},
-				'More actions · ' + type + ' fixture',
-			);
-			expect(centers.menu).toBeCloseTo(centers.badge, 0);
+			await expect(card.getByRole('button', { name: 'Edit connection · ' + type + ' fixture' })).toBeVisible();
+			await expect(card.getByRole('button', { name: 'Duplicate · ' + type + ' fixture' })).toBeVisible();
+			await expect(card.getByRole('button', { name: 'Delete · ' + type + ' fixture' })).toBeVisible();
+			await expect(card.locator('.ui-card__description')).toContainText('example.test');
 		}
-		await expect(
-			app.locator('.connections-card').filter({ hasText: 'SSH fixture' }).locator('.connections-tag'),
-		).toHaveText(catalog.tags[0].name);
+		const cards = app.locator('.connections-card');
+		await expect(cards.getByText(catalog.tags[0].name, { exact: true })).toHaveCount(0);
+		const tagFilter = app.getByRole('combobox', { name: 'Tags', exact: true });
+		await tagFilter.click();
+		await page.getByRole('option', { name: catalog.tags[0].name, exact: true }).click();
+		await expect(cards).toHaveCount(1);
+		await expect(cards.first()).toContainText('SSH fixture');
+		await tagFilter.click();
+		await page.getByRole('option', { name: 'All tags', exact: true }).click();
+		await expect(cards).toHaveCount(3);
 
 		const search = app.getByRole('textbox', { name: 'Search name, address or username', exact: true });
 		await search.fill('user');

@@ -1,7 +1,7 @@
 import { taskOwner } from './fixtures/task-owner';
 import { effectScope } from 'vue';
 import { afterEach, expect, it, vi } from 'vitest';
-import { WorkspaceCatalogSchema } from '../src/shared/workspace-catalog-types';
+import { WorkspaceCatalogSchema, createDefaultWorkspacePreferences } from '../src/shared/workspace-catalog-types';
 import { createWorkspaceCatalog } from '../src/browser/catalog/workspace-catalog';
 
 const { request, report } = vi.hoisted(() => ({ request: vi.fn(), report: vi.fn() }));
@@ -16,7 +16,7 @@ it('saves coalesced field changes after the submitting window is disposed', asyn
 		favorites: [],
 		commands: [],
 		themes: [],
-		preferences: { theme: null, version: 2 },
+		preferences: { ...createDefaultWorkspacePreferences(), version: 2 },
 	});
 	request.mockImplementation(async (_path, method, data) =>
 		method === 'PUT' ? { ...saved, preferences: { ...data, version: data.version + 1 } } : saved,

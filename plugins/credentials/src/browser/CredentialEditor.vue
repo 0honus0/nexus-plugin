@@ -117,7 +117,7 @@
 					:disabled="saving"
 			/></UiField>
 			<template v-else
-				><UiField :label="t('privateKey')" :hint="t('uploadHint')" v-slot="f">
+				><UiField :label="t('privateKey')" v-slot="f">
 					<textarea
 						:disabled="saving"
 						v-model="draft.privateKey"

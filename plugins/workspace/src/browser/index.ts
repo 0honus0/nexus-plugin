@@ -1,9 +1,10 @@
-import { defineAsyncComponent, defineComponent, h, onScopeDispose, shallowRef } from 'vue';
+import { computed, defineAsyncComponent, defineComponent, h, onScopeDispose, provide, shallowRef } from 'vue';
 import { SquareTerminal } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import type { PluginModuleApi, PluginWindowProps } from 'nexus-terminal/browser';
 import { createWorkspaceI18n, registerWorkspaceNotices, workspaceTitle } from './workspace-i18n.js';
-import type { FileManagerOpenFile, WorkspaceFileManagerApi } from './file-manager-api.js';
+import type { FileManagerPresentation, WorkspaceFileManagerApi } from './file-manager-api.js';
+import { fileListKey } from './file-list-key.js';
 import WorkspaceTile from './WorkspaceTile.vue';
 import WorkspaceLoading from './WorkspaceLoading.vue';
 import 'dockview-vue/dist/styles/dockview.css';
@@ -18,7 +19,7 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 	context.onDispose(() => css.remove());
 
 	let appModule: Promise<typeof import('./WorkspaceApp.vue')> | undefined;
-	const fileOpener = shallowRef<FileManagerOpenFile>();
+	const filePresentation = shallowRef<FileManagerPresentation>();
 
 	function preload() {
 		context.signal.throwIfAborted();
@@ -29,17 +30,17 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 	}
 
 	context.provide('fileManager', {
-		createView: (openFile) => createApplication(true, openFile),
+		createView: (presentation) => createApplication(true, presentation),
 
-		registerFileOpener(openFile) {
-			fileOpener.value = openFile;
+		registerFilePresentation(presentation) {
+			filePresentation.value = presentation;
 			return () => {
-				if (fileOpener.value === openFile) fileOpener.value = undefined;
+				if (filePresentation.value === presentation) filePresentation.value = undefined;
 			};
 		},
 	} satisfies WorkspaceFileManagerApi);
 
-	function createApplication(filesOnly: boolean, openFile?: FileManagerOpenFile) {
+	function createApplication(filesOnly: boolean, presentation?: FileManagerPresentation) {
 		return defineAsyncComponent({
 			async loader() {
 				const { default: App } = await preload();
@@ -51,8 +52,12 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 						const { locale } = useI18n({ useScope: 'global' });
 						const i18n = createWorkspaceI18n(locale);
 						onScopeDispose(i18n.dispose);
-						return () =>
-							h(App, { ...props, ctx: context, i18n, filesOnly, openFile: openFile ?? fileOpener.value });
+						const files = computed(() => presentation ?? filePresentation.value);
+						provide(
+							fileListKey,
+							computed(() => files.value?.list),
+						);
+						return () => h(App, { ...props, ctx: context, i18n, filesOnly, openFile: files.value?.open });
 					},
 				});
 			},
@@ -70,22 +75,6 @@ export const activate: PluginModuleApi['activate'] = (context) => {
 		tile: { component: WorkspaceTile, showAtIconSize: true },
 	} as const;
 	const defaultWindowSize = { width: 1080, height: 700 } as const;
-	// 旧宿主可能没有预加载、默认窗口尺寸或图标字段。校验失败的贡献尚未登记。
-	for (const candidate of [
-		{ ...application, icon: SquareTerminal, preload, defaultWindowSize },
-		{ ...application, icon: SquareTerminal, preload },
-		{ ...application, icon: SquareTerminal },
-	]) {
-		try {
-			context.contribute({ applications: [candidate] });
-		} catch (cause) {
-			if (!(cause instanceof Error) || !('code' in cause) || cause.code !== 'PLUGIN_CONTRIBUTIONS_INVALID')
-				throw cause;
-			continue;
-		}
-		context.self.readiness.set({ state: 'ready' });
-		return;
-	}
-	context.contribute({ applications: [application] });
+	context.contribute({ applications: [{ ...application, icon: SquareTerminal, preload, defaultWindowSize }] });
 	context.self.readiness.set({ state: 'ready' });
 };

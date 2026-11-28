@@ -145,8 +145,8 @@
 		surface: '#ffffff',
 		border: '#cccccc',
 		primary: '#a06cd5',
-		download: '#28a745',
-		upload: '#ffc107',
+		download: '#326b58',
+		upload: '#7752b4',
 	});
 
 	const readTheme = () => {
@@ -160,8 +160,8 @@
 			surface: value('--ui-background', chartTheme.value.surface),
 			border: value('--ui-border', chartTheme.value.border),
 			primary: value('--ui-primary', chartTheme.value.primary),
-			download: '#10b981',
-			upload: '#3b82f6',
+			download: value('--ui-success', chartTheme.value.download),
+			upload: value('--ui-primary', chartTheme.value.upload),
 		};
 	};
 
@@ -426,7 +426,7 @@
 		z-index: 1001;
 		max-width: min(240px, calc(100vw - 16px));
 		padding: 6px 10px;
-		border-radius: 6px;
+		border-radius: 8px;
 		color: var(--ui-text);
 		background: var(--ui-surface);
 		border: 1px solid var(--ui-border);

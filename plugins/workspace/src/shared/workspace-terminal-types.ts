@@ -4,19 +4,10 @@ export const terminalFontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas
 
 export const TerminalFontSizeSchema = z.number().int().min(8).max(40);
 
-const TerminalFontSizesSchema = z.preprocess(
-	(value) => {
-		if (value && typeof value === 'object' && !Array.isArray(value) && 'medium' in value) {
-			const { medium, ...rest } = value as Record<string, unknown>;
-			return { ...rest, wide: rest.wide ?? medium };
-		}
-		return value;
-	},
-	z.strictObject({
-		compact: TerminalFontSizeSchema,
-		wide: TerminalFontSizeSchema,
-	}),
-);
+const TerminalFontSizesSchema = z.strictObject({
+	compact: TerminalFontSizeSchema,
+	wide: TerminalFontSizeSchema,
+});
 
 const color = z.string().regex(/^#[0-9a-f]{6}$/i);
 

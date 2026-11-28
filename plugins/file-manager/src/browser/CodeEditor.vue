@@ -1,66 +1,84 @@
 <script setup lang="ts">
-	import { basicSetup, EditorView } from 'codemirror';
-	import { indentWithTab } from '@codemirror/commands';
-	import { keymap } from '@codemirror/view';
-	import { css } from '@codemirror/lang-css';
-	import { html } from '@codemirror/lang-html';
-	import { javascript } from '@codemirror/lang-javascript';
-	import { json } from '@codemirror/lang-json';
-	import { markdown } from '@codemirror/lang-markdown';
-	import { python } from '@codemirror/lang-python';
-	import { onMounted, onScopeDispose, useTemplateRef } from 'vue';
+	import 'monaco-editor/editor/browser/coreCommands';
+	import 'monaco-editor/features/codicon/register';
+	import 'monaco-editor/features/bracketMatching/register';
+	import 'monaco-editor/features/comment/register';
+	import 'monaco-editor/features/contextmenu/register';
+	import 'monaco-editor/features/find/register';
+	import 'monaco-editor/features/folding/register';
+	import 'monaco-editor/features/indentation/register';
+	import 'monaco-editor/features/stickyScroll/register';
+	import 'monaco-editor/features/tokenization/register';
+	import 'monaco-editor/languages/definitions/css/register';
+	import 'monaco-editor/languages/definitions/html/register';
+	import 'monaco-editor/languages/definitions/javascript/register';
+	import 'monaco-editor/languages/definitions/markdown/register';
+	import 'monaco-editor/languages/definitions/python/register';
+	import 'monaco-editor/languages/definitions/typescript/register';
+	import 'monaco-editor/language/json/monaco.contribution';
+	import { editor, type Environment } from 'monaco-editor/editor/editor.api';
+	import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
+	import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
+	import { onMounted, onScopeDispose, useTemplateRef, watch } from 'vue';
 
-	const props = defineProps<{ modelValue: string; language: string; label: string }>();
+	const props = defineProps<{ modelValue: string; language: string; label: string; readOnly?: boolean }>();
 	const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 	const host = useTemplateRef('host');
-	let editor: EditorView | undefined;
+	let instance: editor.IStandaloneCodeEditor | undefined;
+	let model: editor.ITextModel | undefined;
 
-	const languages = {
-		css,
-		html,
-		javascript,
-		json,
-		markdown,
-		python,
-
-		typescript: () => javascript({ typescript: true }),
-	};
-	const theme = EditorView.theme({
-		'&': { height: '100%', color: 'var(--ui-text)', backgroundColor: 'var(--ui-surface)' },
-		'.cm-scroller': {
-			fontFamily: 'var(--ui-font-mono, ui-monospace, monospace)',
-			fontSize: '13px',
-			lineHeight: '1.65',
-		},
-		'.cm-content': { paddingBlock: '12px', caretColor: 'var(--ui-text)' },
-		'.cm-line': { paddingInline: '10px' },
-		'.cm-gutters': { border: '0', backgroundColor: 'var(--ui-surface)', color: 'var(--ui-muted)' },
-		'.cm-activeLine, .cm-activeLineGutter': {
-			backgroundColor: 'color-mix(in srgb, var(--ui-primary) 9%, transparent)',
-		},
-		'.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--ui-text)' },
-		'&.cm-focused': { outline: 'none' },
-	});
+	const environment = globalThis as typeof globalThis & { MonacoEnvironment?: Environment };
 
 	onMounted(() => {
-		const language = languages[props.language as keyof typeof languages];
-		editor = new EditorView({
-			doc: props.modelValue,
-			parent: host.value!,
-			extensions: [
-				basicSetup,
-				theme,
-				EditorView.contentAttributes.of({ 'aria-label': props.label, spellcheck: 'false' }),
-				keymap.of([indentWithTab]),
-				...(language ? [language()] : []),
-				EditorView.updateListener.of((update) => {
-					if (update.docChanged) emit('update:modelValue', update.state.doc.toString());
-				}),
-			],
+		environment.MonacoEnvironment = {
+			...environment.MonacoEnvironment,
+
+			getWorker: (_, label) => (label === 'json' ? new JsonWorker() : new EditorWorker()),
+		};
+		model = editor.createModel(props.modelValue, props.language === 'text' ? 'plaintext' : props.language);
+		instance = editor.create(host.value!, {
+			model,
+			ariaLabel: props.label,
+			automaticLayout: true,
+			theme: 'vs-dark',
+			fontSize: 14,
+			readOnly: props.readOnly,
+			wordWrap: 'on',
+			wrappingIndent: 'same',
+			lineNumbersMinChars: 3,
+			showFoldingControls: 'always',
+			guides: { bracketPairs: 'active', highlightActiveIndentation: true },
+			stickyScroll: { enabled: true },
+			scrollBeyondLastLine: false,
+		});
+		instance.onDidChangeModelContent(() => {
+			const value = model?.getValue();
+			if (value !== undefined && value !== props.modelValue) emit('update:modelValue', value);
 		});
 	});
 
-	onScopeDispose(() => editor?.destroy());
+	watch(
+		() => props.modelValue,
+		(value) => {
+			if (model && model.getValue() !== value) model.setValue(value);
+		},
+	);
+	watch(
+		() => [props.readOnly, props.label] as const,
+		([readOnly, ariaLabel]) => instance?.updateOptions({ readOnly, ariaLabel }),
+	);
+
+	function openSearch(): void {
+		instance?.focus();
+		void instance?.getAction('actions.find')?.run();
+	}
+
+	defineExpose({ openSearch });
+
+	onScopeDispose(() => {
+		instance?.dispose();
+		model?.dispose();
+	});
 </script>
 
 <template><div ref="host" class="file-code-editor" data-ui-selection="text" /></template>

@@ -6,6 +6,7 @@ import {
 	ThemeInputSchema,
 	WorkspacePreferencesSchema,
 	WorkspaceCatalogSchema,
+	createDefaultWorkspacePreferences,
 	type CatalogResource,
 } from '../shared/workspace-catalog-types';
 import { WorkspaceError } from './workspace-error';
@@ -46,7 +47,7 @@ export class WorkspaceCatalogStorage {
 				preferences:
 					preferences && !Array.isArray(preferences)
 						? { ...JSON.parse(preferences.document), version: preferences.version }
-						: { theme: null, version: 0 },
+						: { ...createDefaultWorkspacePreferences(), version: 0 },
 			});
 		});
 	}

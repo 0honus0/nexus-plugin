@@ -1,13 +1,15 @@
 import { reactive } from 'vue';
 import type { FileManagerFile } from '@nexus-terminal/workspace/file-manager-api';
 import type { PreviewFormat } from './preview-formats.js';
+import type { EncodingChoice, TextEncoding } from './text-encoding.js';
 
 export interface TextDocument {
 	original: string;
 	draft: string;
 	hash: string;
 	bom: boolean;
-	lineEnding: '\n' | '\r\n';
+	encoding: TextEncoding;
+	lineEnding: '\n' | '\r\n' | '\r';
 }
 
 export interface PreviewDocument {
@@ -15,6 +17,7 @@ export interface PreviewDocument {
 	file: FileManagerFile;
 	format: PreviewFormat;
 	mode: 'preview' | 'edit' | 'split';
+	encodingChoice: EncodingChoice;
 	text?: TextDocument;
 	saving: boolean;
 }
@@ -29,6 +32,7 @@ export function createDocument(file: FileManagerFile, format: PreviewFormat): Pr
 		file,
 		format,
 		mode: format.kind === 'text' ? 'edit' : 'preview',
+		encodingChoice: 'language' in format ? (format.encodingHint ?? 'auto') : 'auto',
 		saving: false,
 	});
 }

@@ -1,6 +1,6 @@
 import type { CredentialsClientApi } from '@nexus-terminal/credentials/credentials-client-api';
 import { PluginHttpError, type PluginContextApi, type PluginViewApi } from 'nexus-terminal/browser';
-import { readonly, ref, shallowReadonly, shallowRef, type Ref } from 'vue';
+import { computed, readonly, ref, shallowReadonly, shallowRef, type Ref } from 'vue';
 import { z } from 'zod';
 import { ConnectionCatalogResponseSchema } from '../shared/connection-http-types.js';
 import {
@@ -31,8 +31,11 @@ export interface ConnectionCreateOptions {
 export interface ConnectionsClientApi {
 	readonly catalog: Readonly<Ref<ConnectionCatalog>>;
 	readonly loaded: Readonly<Ref<boolean>>;
+	readonly desktopAvailable: Readonly<Ref<boolean>>;
 	refresh(signal?: AbortSignal): Promise<void>;
 	openManager(): void;
+	openDesktop(id: string): void;
+	registerDesktopOpener(open: (id: string) => void): () => void;
 	openEditor(request: ConnectionEditorRequest, signal?: AbortSignal): Promise<void>;
 	create(input: ConnectionInput, options?: ConnectionCreateOptions): Promise<Connection>;
 }
@@ -49,11 +52,13 @@ export class ConnectionsClient implements ConnectionsClientApi {
 	readonly #loaded = ref(false);
 	readonly #credentials = shallowRef<CredentialsClientApi>();
 	readonly #editor = shallowRef<ConnectionEditorRequest>();
+	readonly #desktopOpener = shallowRef<(id: string) => void>();
 	readonly catalog = shallowReadonly(this.#catalog);
 	readonly loaded = readonly(this.#loaded);
 	readonly requests = readonly(this.#requests);
 	readonly credentials = shallowReadonly(this.#credentials);
 	readonly editorRequest = shallowReadonly(this.#editor);
+	readonly desktopAvailable = computed(() => !!this.#desktopOpener.value);
 	#subscribed = false;
 	#reading: Promise<void> | undefined;
 	#revision: number | undefined;
@@ -75,6 +80,19 @@ export class ConnectionsClient implements ConnectionsClientApi {
 
 	openManager(): void {
 		this.#context.app.windows.open('main');
+	}
+
+	openDesktop(id: string): void {
+		this.#context.signal.throwIfAborted();
+		this.#desktopOpener.value?.(id);
+	}
+
+	registerDesktopOpener(open: (id: string) => void): () => void {
+		this.#context.signal.throwIfAborted();
+		this.#desktopOpener.value = open;
+		return () => {
+			if (this.#desktopOpener.value === open) this.#desktopOpener.value = undefined;
+		};
 	}
 
 	async openEditor(input: ConnectionEditorRequest, signal?: AbortSignal): Promise<void> {

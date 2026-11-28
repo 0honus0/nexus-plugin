@@ -24,12 +24,12 @@ it('installs the extension and cleans up a live SSH operation when its consumer 
 			name: consumerId,
 			version: '1.0.0',
 			type: 'module',
-			peerDependencies: { 'nexus-terminal': '^1.1.0' },
+			peerDependencies: plugin.peerDependencies,
 			files: ['dist'],
 			nexus: {
 				kind: 'extension',
 				entry: { backend: 'dist/index.js' },
-				dependsOn: { [sshId]: '^0.0.1-dev.1', [plugin.name]: '^' + plugin.version },
+				dependsOn: { ...plugin.nexus.dependsOn, [plugin.name]: '^' + plugin.version },
 			},
 		}),
 	);

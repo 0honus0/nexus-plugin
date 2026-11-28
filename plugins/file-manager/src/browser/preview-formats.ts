@@ -1,3 +1,5 @@
+import type { TextEncoding } from './text-encoding.js';
+
 const MiB = 1024 * 1024;
 const imageTypes = new Map([
 	['png', 'image/png'],
@@ -22,10 +24,11 @@ const languages: Readonly<Record<string, string>> = {
 	mts: 'typescript',
 };
 const plainExtensions = new Set(['txt', 'log', 'yaml', 'yml', 'toml', 'ini', 'conf', 'xml', 'sh', 'sql']);
+const gbExtensions = new Set(['gbk', 'gb2312', 'gb18030']);
 const textNames = new Set(['readme', 'license', 'dockerfile', 'makefile', '.gitignore', '.editorconfig']);
 
 export type PreviewFormat =
-	| { kind: 'text' | 'markdown' | 'csv'; maxBytes: number; language: string }
+	| { kind: 'text' | 'markdown' | 'csv'; maxBytes: number; language: string; encodingHint?: TextEncoding }
 	| { kind: 'image' | 'pdf'; maxBytes: number; mime: string };
 
 export function previewFormat(name: string): PreviewFormat | undefined {
@@ -37,6 +40,13 @@ export function previewFormat(name: string): PreviewFormat | undefined {
 	if (extension === 'md' || extension === 'markdown')
 		return { kind: 'markdown', maxBytes: 2 * MiB, language: 'markdown' };
 	if (extension === 'csv' || extension === 'tsv') return { kind: 'csv', maxBytes: 2 * MiB, language: 'text' };
+	if (gbExtensions.has(extension))
+		return {
+			kind: 'text',
+			maxBytes: 2 * MiB,
+			language: 'text',
+			encodingHint: extension === 'gb18030' ? 'gb18030' : 'gbk',
+		};
 	if (Object.hasOwn(languages, extension) || plainExtensions.has(extension) || textNames.has(normalized))
 		return { kind: 'text', maxBytes: 2 * MiB, language: languages[extension] ?? 'text' };
 }

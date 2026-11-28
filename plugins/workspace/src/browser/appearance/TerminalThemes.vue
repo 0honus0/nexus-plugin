@@ -115,7 +115,7 @@
 		if (!file) return;
 		try {
 			if (file.size > 1024 * 1024) throw new WorkspaceModuleError('WORKSPACE_OPERATION_FAILED');
-			const entries = readTerminalThemeFile(await file.text(), file.name);
+			const entries = readTerminalThemeFile(await file.text());
 			for (const entry of entries) if (!(await catalog.save('themes', entry))) break;
 		} catch {
 			catalog.report({ code: 'WORKSPACE_THEME_INVALID' });

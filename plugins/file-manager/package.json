@@ -1,6 +1,6 @@
 {
   "name": "@nexus-terminal/file-manager",
-  "version": "0.0.1-dev.6",
+  "version": "0.0.1",
   "type": "module",
   "displayName": "File Manager",
   "description": "Browse and transfer files on saved SSH connections",
@@ -16,7 +16,8 @@
   "scripts": {
     "build": "node ../../scripts/build-plugin.mjs",
     "typecheck": "vue-tsc --noEmit",
-    "test": "pnpm build"
+    "test:setup": "playwright install --with-deps chromium",
+    "test": "pnpm build && tsx --test tests/*.test.ts"
   },
   "nexus": {
     "kind": "application",
@@ -25,7 +26,7 @@
       "frontend": "dist/browser/index.js"
     },
     "dependsOn": {
-      "@nexus-terminal/workspace": "^0.0.1-dev.29"
+      "@nexus-terminal/workspace": "^0.0.1"
     },
     "i18n": {
       "zh-CN": {

@@ -4,6 +4,7 @@ import { isBuiltin } from 'node:module';
 import { resolve } from 'node:path';
 import vue from '@vitejs/plugin-vue';
 import { build } from 'vite';
+import { rdpWasmAssets } from './rdp-wasm-assets.mjs';
 
 const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
 const targets = { node: manifest.nexus.entry.backend, browser: manifest.nexus.entry.frontend };
@@ -12,8 +13,13 @@ for (const [target, output] of Object.entries(targets)) {
 	if (!output) continue;
 	const browser = target === 'browser';
 	await build({
+		...(browser &&
+			['@nexus-terminal/file-manager', '@nexus-terminal/remote-desktop'].includes(manifest.name) && {
+				base: './',
+			}),
 		publicDir: false,
-		plugins: browser ? [vue()] : [],
+		resolve: { alias: { '#file-list': resolve(import.meta.dirname, '../shared/browser/FileList.vue') } },
+		plugins: browser ? [vue(), rdpWasmAssets()] : [],
 		ssr: { noExternal: true },
 		build: {
 			ssr: !browser,

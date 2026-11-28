@@ -41,24 +41,20 @@ test('packaged desktop registers a launcher and opens the saved VNC profile', { 
 	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await page.getByRole('button', { name: 'Connections', exact: true }).last().click();
 	const manager = page.getByRole('region', { name: 'Connections', exact: true }).first();
-	await manager.getByRole('button', { name: 'More actions · ' + profile.name, exact: true }).click();
-	await page.getByRole('menuitem', { name: 'Open remote desktop', exact: true }).click();
+	await page.clock.install();
+	await page.route('**' + base + '/sessions', () => undefined);
+	await manager.getByRole('button', { name: 'Open remote desktop · ' + profile.name, exact: true }).click();
 	const desktop = page.getByRole('region', { name: 'Remote Desktop', exact: true });
 	await expect(desktop.getByRole('combobox', { name: 'Saved desktop' })).toContainText(profile.name);
+	await expect(desktop.getByRole('status')).toHaveText('Connecting…');
+	await page.clock.fastForward(25_001);
+	await expect(desktop.getByRole('alert')).toContainText('did not respond in time');
+	await expect(desktop.getByRole('button', { name: 'Connect', exact: true })).toBeEnabled();
 	const method = desktop.getByRole('combobox', { name: 'Connection method' });
 	await expect(method).toContainText('Native');
 	await method.click();
 	await expect(page.getByRole('option')).toHaveText(['Native']);
 	await page.keyboard.press('Escape');
-	const connect = desktop.getByRole('button', { name: 'Connect', exact: true });
-	await expect(connect).toBeEnabled();
-	await page.clock.install();
-	await page.route('**' + base + '/sessions', () => undefined);
-	await connect.click();
-	await expect(desktop.getByRole('status')).toHaveText('Connecting…');
-	await page.clock.fastForward(25_001);
-	await expect(desktop.getByRole('alert')).toContainText('did not respond in time');
-	await expect(connect).toBeEnabled();
 	const impact = (await host.json(
 		packageManager + '/plugins/' + encodeURIComponent(pluginId) + '/runtime-impact',
 	)) as {

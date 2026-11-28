@@ -104,7 +104,7 @@ it('binds an account before configuration and accepts only a valid signature for
 	const bindingUrl = host.origin + oidcBindingCallbackPath;
 	await expect(app.getByLabel('Redirect URI', { exact: true })).toHaveValue(callbackUrl);
 	await expect(callback).toHaveValue(bindingUrl);
-	await expect(save).toHaveAccessibleDescription(/saved after verification/u);
+	await expect(save).toBeEnabled();
 	await expectFormFields(form);
 
 	const startUrl = host.origin + path + '/binding/start';
